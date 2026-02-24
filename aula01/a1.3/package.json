@@ -1,0 +1,18 @@
+{
+  "name": "nextcurse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
+  },
+  
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}
