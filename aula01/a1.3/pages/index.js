@@ -1,21 +1,41 @@
-import Link from 'next/link'
+import Image from "next/image";
+import Link from "next/link";
+import Header from "./components/Header";
+import styles from "../styles/Home.module.css";
 
-
-function HomePage () {
+export default function HomePage() {
   return (
-    <div>
-      BEM-VINDO
-      <img src="/images/background.png" alt="Background" />
-      <ul>
-        <li>
-          <Link href="/sobre">
-            Ir para a Sobre nós
+    <>
+      <Header />
+
+      <section className={styles.hero}>
+        <Image
+          src="/images/background.png"
+          alt="Festeja Aki"
+          fill
+          priority
+          className={styles.bg}
+        />
+
+        <div className={styles.overlay} />
+
+        <div className={styles.content}>
+          <h1 className={styles.title}>
+            <span className={styles.wordCycle} aria-label="Transforme, Celebre, Viva">
+              <span>TRANSFORME</span>
+              <span>REALIZEM</span>
+              <span>APROVEITEM</span>
+            </span>{" "}
+            MOMENTOS ESPECIAIS
+            <br />
+            EM MEMÓRIAS INESQUECÍVEIS.
+          </h1>
+
+          <Link href="/sobre" className={styles.btn}>
+            Reservar agora
           </Link>
-        </li>
-      </ul>
-
-    </div>
-  )
+        </div>
+      </section>
+    </>
+  );
 }
-
-export default HomePage
