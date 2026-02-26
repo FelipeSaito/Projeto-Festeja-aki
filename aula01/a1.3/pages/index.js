@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import Header from "./components/Header";
+import Header from "../components/Header";
 import styles from "../styles/Home.module.css";
 
 export default function HomePage() {
@@ -100,7 +100,7 @@ export default function HomePage() {
     {/* BOT LEFT IMAGE */}
     <div className={`${styles.photoWrap} ${styles.bl}`}>
       <div className={styles.cornerFrame}>
-        <Image src="/images/localizacao.svg" alt="Fachada" width={266} height={355} className={styles.photo} />
+        <Image src="/images/festejaaki.svg" alt="Fachada" width={266} height={355} className={styles.photo} />
       </div>
     </div>
 
