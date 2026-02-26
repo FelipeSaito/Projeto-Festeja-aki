@@ -13,7 +13,6 @@
   width: 100%;
   max-width: 1200px; /* controla largura */
   padding: 0 40px;   /* 👈 aqui entra o gap real */
-
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -22,6 +21,11 @@
 .logo {
   font-weight: 700;
   font-size: 18px;
+  color: #ffffff; /* cor normal */
+  transition: color 0.3s ease;
+}
+
+.logo:hover {
   color: #FACC15;
 }
 
@@ -62,3 +66,4 @@
   background: #EAB308;
   transform: translateY(-1px);
 }
+

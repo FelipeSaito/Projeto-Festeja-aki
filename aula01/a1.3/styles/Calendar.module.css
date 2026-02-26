@@ -1,0 +1,96 @@
+.page{
+  min-height: 100vh;
+  background: #0b0f12;
+  color: #fff;
+  padding: 110px 20px 60px; /* 110 por causa do header fixo */
+}
+
+.top{
+  max-width: 1100px;
+  margin: 0 auto 24px;
+}
+
+.title{
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.subtitle{
+  margin: 0;
+  color: rgba(255,255,255,.7);
+}
+
+.backRow{ margin-top: 14px; }
+.backLink{
+  color: rgba(255,255,255,.8);
+  text-decoration: none;
+}
+.backLink:hover{ color: #FACC15; }
+
+.grid{
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 18px;
+}
+
+.card{
+  background: #11161b;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.cardTitle{
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #FACC15;
+}
+
+.selected{
+  margin-top: 12px;
+  color: rgba(255,255,255,.75);
+}
+
+.summary{
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 16px;
+  color: rgba(255,255,255,.8);
+}
+.summary span{
+  color: rgba(255,255,255,.6);
+}
+
+.cta{
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 14px;
+  font-weight: 800;
+  background: #FACC15;
+  color: #17191A;
+  cursor: pointer;
+  transition: .2s ease;
+}
+.cta:hover{ background: #EAB308; transform: translateY(-1px); }
+.cta:disabled{
+  background: rgba(250,204,21,.25);
+  color: rgba(255,255,255,.7);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hint{
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,.6);
+}
+.rdp-caption_label {
+  text-transform: capitalize;
+}
+
+@media (max-width: 900px){
+  .grid{ grid-template-columns: 1fr; }
+}
