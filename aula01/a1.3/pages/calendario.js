@@ -45,10 +45,9 @@ export default function CalendarioPage() {
   async function loadBusyDates() {
     try {
       setLoadingDates(true);
-      const r = await fetch("/api/calendario");
-      const j = await r.json();
-      // esperado: { dates: ["2026-03-01", ...] }
-      setBusyDates(Array.isArray(j?.dates) ? j.dates : []);
+        const r = await fetch("/api/reservas");
+        const j = await r.json();
+        setBusyDates(Array.isArray(j?.dates) ? j.dates : []);
     } catch (e) {
       setBusyDates([]);
     } finally {
@@ -62,16 +61,27 @@ export default function CalendarioPage() {
 
   // ✅ desabilita: não fim de semana OU já reservado
   const disabled = useMemo(() => {
-    const busySet = new Set(busyDates);
-    return (date) => {
-      const day = date.getDay();
-      const isWeekend = day === 0 || day === 6;
-      if (!isWeekend) return true;
+  const busySet = new Set(busyDates);
 
-      const iso = toISODate(date);
-      return busySet.has(iso);
-    };
-  }, [busyDates]);
+  return (date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+
+    const day = d.getDay();
+    const isWeekend = day === 0 || day === 6;
+
+    const iso = toISODate(d);
+
+    return (
+      d < today ||        // ❌ bloqueia datas passadas
+      !isWeekend ||       // ❌ bloqueia dias que não são sábado/domingo
+      busySet.has(iso)    // ❌ bloqueia datas já reservadas
+    );
+  };
+}, [busyDates]);
 
   const label = selected
     ? selected.toLocaleDateString("pt-BR", {
@@ -91,19 +101,28 @@ export default function CalendarioPage() {
       return;
     }
 
+    console.log("DATA SELECIONADA:", selected);
+    console.log("DATA ENVIADA:", toISODate(selected));
+
+
     const data_evento = toISODate(selected);
 
     try {
       setSubmitting(true);
 
-      const r = await fetch("/api/calendario", {
+      const r = await fetch("/api/reservas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          data_evento,
           nome,
           whatsapp,
           email,
+          dataReserva: toISODate(selected),
+          horarioInicio: "09:30",
+          horarioFim: "22:00",
+          valorEntrada: 0,
+          valorTotal: 0,
+          observacoes: "",
         }),
       });
 
