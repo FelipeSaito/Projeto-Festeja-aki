@@ -1,7 +1,7 @@
 // pages/api/admin/metrics.js
-import { dbConnect } from "../../../lib/mongodb";
-import Reserva from "../../../models/Reserva";
-import { COOKIE_NAME, verifyToken } from "../../../lib/auth";
+import { dbConnect } from "../../lib/mongodb";
+import Reserva from "../../models/Reserva";
+import { COOKIE_NAME, verifyToken } from "../../lib/auth";
 
 function monthRangeISO(date = new Date()) {
   const y = date.getFullYear();
