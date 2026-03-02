@@ -1,14 +1,21 @@
+// lib/auth.js
 import jwt from "jsonwebtoken";
 import { parse } from "cookie";
 
 export const COOKIE_NAME = "fa_token";
 
+function getSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET não definido");
+  return secret;
+}
+
 export function signAdminToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "2h" });
+  return jwt.sign(payload, getSecret(), { expiresIn: "2h" });
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, process.env.JWT_SECRET);
+  return jwt.verify(token, getSecret());
 }
 
 export function getTokenFromReq(req) {
