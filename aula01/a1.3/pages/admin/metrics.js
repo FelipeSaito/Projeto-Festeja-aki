@@ -1,51 +1,49 @@
 // pages/api/admin/metrics.js
-import { dbConnect } from "../../lib/mongodb";
-import Reserva from "../../models/Reserva";
-import { COOKIE_NAME, verifyToken } from "../../lib/auth";
+import { dbConnect } from "../../../lib/mongodb";
+import Reserva from "../../../models/Reserva";
+import { COOKIE_NAME, verifyToken } from "../../../lib/auth";
 
-function monthRangeISO(date = new Date()) {
-  const y = date.getFullYear();
-  const m = date.getMonth(); // 0-11
-  const start = new Date(y, m, 1);
-  const end = new Date(y, m + 1, 1);
-  const toISO = (d) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-      d.getDate()
-    ).padStart(2, "0")}`;
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
 
-  return { startISO: toISO(start), endISO: toISO(end) };
+function monthStartISO(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function nextMonthStartISO(date) {
+  const d = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 export default async function handler(req, res) {
-  await dbConnect();
-
-  // 🔐 auth via cookie admin
-  const token = req.cookies?.[COOKIE_NAME];
-  const payload = token ? verifyToken(token) : null;
-
-  if (!payload || payload.role !== "admin") {
-    return res.status(401).json({ ok: false, error: "Não autorizado" });
-  }
-
   if (req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
 
   try {
-    const { startISO, endISO } = monthRangeISO(new Date());
-    const todayISO = new Date();
-    const yyyy = todayISO.getFullYear();
-    const mm = String(todayISO.getMonth() + 1).padStart(2, "0");
-    const dd = String(todayISO.getDate()).padStart(2, "0");
-    const today = `${yyyy}-${mm}-${dd}`;
+    await dbConnect();
 
-    // 1) Contadores por status
+    // 🔐 Verificação de admin via cookie
+    const token = req.cookies?.[COOKIE_NAME];
+    const payload = token ? verifyToken(token) : null;
+
+    if (!payload || payload.role !== "admin") {
+      return res.status(401).json({ ok: false, error: "Não autorizado" });
+    }
+
+    // =============================
+    // 1️⃣ CONTAGEM POR STATUS
+    // =============================
     const statusAgg = await Reserva.aggregate([
       { $group: { _id: "$status", total: { $sum: 1 } } },
     ]);
 
     const statusMap = statusAgg.reduce((acc, cur) => {
-      acc[cur._id || "UNKNOWN"] = cur.total;
+      acc[cur._id] = cur.total;
       return acc;
     }, {});
 
@@ -56,22 +54,36 @@ export default async function handler(req, res) {
     const confirmadas = statusMap.CONFIRMED || 0;
     const canceladas = statusMap.CANCELLED || 0;
 
-    // 2) Receita total (somente CONFIRMED)
+    const conversao =
+      totalReservas > 0 ? confirmadas / totalReservas : 0;
+
+    // =============================
+    // 2️⃣ RECEITA CONFIRMADA TOTAL
+    // =============================
     const receitaTotalAgg = await Reserva.aggregate([
       { $match: { status: "CONFIRMED" } },
       {
         $group: {
           _id: null,
-          total: { $sum: { $ifNull: ["$valorTotal", 0] } },
-          entrada: { $sum: { $ifNull: ["$valorEntrada", 0] } },
+          receitaTotal: { $sum: { $ifNull: ["$valorTotal", 0] } },
+          entradasTotalConfirmadas: {
+            $sum: { $ifNull: ["$valorEntrada", 0] },
+          },
         },
       },
     ]);
 
-    const receitaTotal = receitaTotalAgg?.[0]?.total || 0;
-    const entradasTotal = receitaTotalAgg?.[0]?.entrada || 0;
+    const receitaTotal = receitaTotalAgg?.[0]?.receitaTotal || 0;
+    const entradasTotalConfirmadas =
+      receitaTotalAgg?.[0]?.entradasTotalConfirmadas || 0;
 
-    // 3) Receita mês atual (somente CONFIRMED)
+    // =============================
+    // 3️⃣ RECEITA DO MÊS
+    // =============================
+    const now = new Date();
+    const startISO = monthStartISO(now);
+    const endISO = nextMonthStartISO(now);
+
     const receitaMesAgg = await Reserva.aggregate([
       {
         $match: {
@@ -82,42 +94,97 @@ export default async function handler(req, res) {
       {
         $group: {
           _id: null,
-          total: { $sum: { $ifNull: ["$valorTotal", 0] } },
-          entrada: { $sum: { $ifNull: ["$valorEntrada", 0] } },
+          receitaMes: { $sum: { $ifNull: ["$valorTotal", 0] } },
+          entradasMesConfirmadas: {
+            $sum: { $ifNull: ["$valorEntrada", 0] },
+          },
         },
       },
     ]);
 
-    const receitaMes = receitaMesAgg?.[0]?.total || 0;
-    const entradasMes = receitaMesAgg?.[0]?.entrada || 0;
+    const receitaMes = receitaMesAgg?.[0]?.receitaMes || 0;
+    const entradasMesConfirmadas =
+      receitaMesAgg?.[0]?.entradasMesConfirmadas || 0;
 
-    // 4) Próximas reservas confirmadas (top 8)
-    // (assumindo dataReserva "YYYY-MM-DD")
+    // =============================
+    // 4️⃣ PENDÊNCIAS
+    // =============================
+    const pendenciasAgg = await Reserva.aggregate([
+      { $match: { status: "PENDING" } },
+      {
+        $group: {
+          _id: null,
+          receitaPendente: {
+            $sum: { $ifNull: ["$valorTotal", 0] },
+          },
+          entradasPendentesTotal: {
+            $sum: { $ifNull: ["$valorEntrada", 0] },
+          },
+          entradasPendentesNaoPagas: {
+            $sum: {
+              $cond: [
+                { $eq: ["$entradaPaga", false] },
+                { $ifNull: ["$valorEntrada", 0] },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    const receitaPendente =
+      pendenciasAgg?.[0]?.receitaPendente || 0;
+    const entradasPendentesTotal =
+      pendenciasAgg?.[0]?.entradasPendentesTotal || 0;
+    const entradasPendentesNaoPagas =
+      pendenciasAgg?.[0]?.entradasPendentesNaoPagas || 0;
+
+    // =============================
+    // 5️⃣ ENTRADAS PAGAS
+    // =============================
+    const entradasPagasAgg = await Reserva.aggregate([
+      { $match: { entradaPaga: true } },
+      {
+        $group: {
+          _id: null,
+          entradasPagas: {
+            $sum: { $ifNull: ["$valorEntrada", 0] },
+          },
+        },
+      },
+    ]);
+
+    const entradasPagas =
+      entradasPagasAgg?.[0]?.entradasPagas || 0;
+
+    // =============================
+    // 6️⃣ PRÓXIMAS RESERVAS
+    // =============================
+    const today = todayISO();
+
     const proximas = await Reserva.find({
-      status: "CONFIRMED",
+      status: { $in: ["PENDING", "CONFIRMED"] },
       dataReserva: { $gte: today },
     })
       .sort({ dataReserva: 1 })
-      .limit(8)
+      .limit(10)
       .populate("customerId", "nome whatsapp email")
       .lean();
 
-    // 5) Série simples: reservas por mês (últimos 6 meses) — opcional
-    // se preferir, dá pra tirar. aqui vai por "YYYY-MM"
-    const now = new Date();
+    // =============================
+    // 7️⃣ ÚLTIMOS 6 MESES
+    // =============================
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      months.push(key);
+      months.push(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      );
     }
 
     const seriesAgg = await Reserva.aggregate([
-      {
-        $addFields: {
-          ym: { $substr: ["$dataReserva", 0, 7] }, // "YYYY-MM"
-        },
-      },
+      { $addFields: { ym: { $substr: ["$dataReserva", 0, 7] } } },
       { $match: { ym: { $in: months } } },
       { $group: { _id: "$ym", total: { $sum: 1 } } },
       { $sort: { _id: 1 } },
@@ -133,23 +200,35 @@ export default async function handler(req, res) {
       total: seriesMap[m] || 0,
     }));
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       data: {
         totalReservas,
         pendentes,
         confirmadas,
         canceladas,
+        conversao,
+
         receitaTotal,
-        entradasTotal,
         receitaMes,
-        entradasMes,
+        receitaPendente,
+
+        entradasPagas,
+        entradasTotalConfirmadas,
+        entradasMesConfirmadas,
+
+        entradasPendentesTotal,
+        entradasPendentesNaoPagas,
+
         proximas,
         reservasPorMes,
       },
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ok: false, error: "Erro ao gerar métricas" });
+    console.error("ERRO METRICS:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Erro ao gerar métricas",
+    });
   }
 }

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AdminLayout from "../../components/AdminLayout";
 import styles from "../../styles/adminDashboard.module.css";
+// pages/api/admin/dashboard.js
+export { default } from "./metrics";
 
 function moneyBR(value) {
   const n = Number(value || 0);
