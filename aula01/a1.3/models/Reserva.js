@@ -1,6 +1,7 @@
 // models/Reserva.js
 import mongoose from "mongoose";
 
+
 const ReservaSchema = new mongoose.Schema(
   {
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },

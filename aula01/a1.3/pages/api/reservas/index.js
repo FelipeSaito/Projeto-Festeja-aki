@@ -168,11 +168,33 @@ if (isPastISO(dataReserva)) {
             
           }
 
-        let customer = await Customer.findOne({ whatsapp: wpp });
+          let customer = await Customer.findOne({ whatsapp: wpp });
 
-        if (!customer) {
-          customer = await Customer.create({ nome, whatsapp: wpp, email: email || "" });
-        }
+          if (!customer) {
+            customer = await Customer.create({
+              nome,
+              whatsapp: wpp,
+              email: email || "",
+            });
+          } else {
+            // 🔥 Atualiza nome e email se forem diferentes
+            const updates = {};
+
+            if (nome && nome !== customer.nome) {
+              updates.nome = nome;
+            }
+
+            if (email && email !== customer.email) {
+              updates.email = email;
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await Customer.updateOne(
+                { _id: customer._id },
+                { $set: updates }
+              );
+            }
+          }
 
         finalCustomerId = customer._id;
       }

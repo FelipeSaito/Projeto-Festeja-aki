@@ -1,301 +1,240 @@
-import { useEffect, useMemo, useState } from "react";
+// pages/admin/reservas/index.js
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import AdminLayout from "../../components/AdminLayout";
 import styles from "../../styles/admin.module.css";
 
 function statusLabel(status) {
   if (status === "CONFIRMED") return "Confirmada";
+  if (status === "PENDING") return "Pendente";
   if (status === "CANCELLED") return "Cancelada";
-  return "Pendente";
+  return status || "-";
 }
 
-// data_evento vem como "YYYY-MM-DD" (string) no seu backend
-function formatBRDate(yyyy_mm_dd) {
+function formatDateBR(yyyy_mm_dd) {
   if (!yyyy_mm_dd) return "-";
   const [y, m, d] = String(yyyy_mm_dd).split("-");
   if (!y || !m || !d) return String(yyyy_mm_dd);
   return `${d}/${m}/${y}`;
 }
 
-function onlyDigits(s) {
-  return String(s || "").replace(/\D/g, "");
+function moneyBR(value) {
+  const n = Number(value || 0);
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function openWhats(reserva) {
-  const phone = onlyDigits(reserva.customerId?.whatsapp);
-  if (!phone) {
-    alert("Telefone não encontrado.");
-    return;
+/* ===== WhatsApp helpers ===== */
+function onlyDigits(v = "") {
+  return String(v).replace(/\D/g, "");
+}
+
+function normalizeBRPhone(raw = "") {
+  const d = onlyDigits(raw);
+  if (!d) return "";
+  // se vier só DDD+cel (11 dígitos), adiciona DDI 55
+  if (d.length === 11) return `55${d}`;
+  return d; // se já vier com 55, mantém
+}
+
+function openWhatsApp(phoneRaw, message) {
+  const phone = normalizeBRPhone(phoneRaw);
+  if (!phone) return false;
+
+  const url = new URL(`https://wa.me/${phone}`);
+  url.searchParams.set("text", message); // Firefox-friendly
+
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+  return true;
+}
+
+export default function AdminReservasPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [reservas, setReservas] = useState([]);
+  const [error, setError] = useState("");
+
+  async function fetchReservas() {
+    try {
+      setError("");
+      setLoading(true);
+
+      const res = await fetch("/api/admin/reservas?full=1", {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j?.error || "Erro ao carregar reservas");
+
+      setReservas(Array.isArray(j.reservas) ? j.reservas : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const msg =
-    `Olá, ${reserva.customerId?.nome || "tudo bem"}! 😊\n` +
-    `Sobre sua reserva do salão:\n` +
-    `📅 Data: ${reserva.dataReserva}\n` +
-    `⏰ Horário: ${reserva.horarioInicio || "09:30"} - ${reserva.horarioFim || "22:00"}\n` +
-    `📌 Status: ${statusLabel(reserva.status)}\n\n` +
-    `Se precisar de algo, me avise!`;
+  // ✅ CONFIRMAR RESERVA (mensagem de confirmacao)
+  async function confirmarReserva(id) {
+    if (!window.confirm("Confirmar esta reserva?")) return;
 
-  const full = phone.startsWith("55") ? phone : `55${phone}`;
-  const url = `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
+    try {
+      setError("");
 
-export default function ReservasAdminPage() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+      const res = await fetch(`/api/admin/reservas/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CONFIRM" }),
+      });
 
-  // filtros
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [q, setQ] = useState("");
-  const [dateFilter, setDateFilter] = useState(""); // yyyy-mm-dd
-  const [sort, setSort] = useState("DATE_ASC"); // DATE_ASC | DATE_DESC | CREATED_DESC
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j?.error || "Erro ao confirmar");
 
-  // modal
-  const [openId, setOpenId] = useState(null);
-  const selected = useMemo(
-    () => rows.find((r) => String(r._id) === String(openId)) || null,
-    [openId, rows]
-  );
+      const rLocal = reservas.find((x) => x._id === id);
+      if (!rLocal) {
+        fetchReservas();
+        return;
+      }
+
+      const nome = rLocal?.customerId?.nome || "Cliente";
+      const phone = rLocal?.customerId?.whatsapp;
+
+      const msg = `
+✨ *Reserva Confirmada*
+
+Ola ${nome}, tudo bem?
+
+Sua reserva foi confirmada com sucesso.
+
+Data do Evento: ${formatDateBR(rLocal?.dataReserva)}
+Horario: ${rLocal?.horarioInicio || "09:30"} as ${rLocal?.horarioFim || "22:00"}
+Valor da Entrada: ${moneyBR(rLocal?.valorEntrada)}
+Valor Total: ${moneyBR(rLocal?.valorTotal)}
+
+Estamos preparando tudo para proporcionar uma experiencia memoravel.
+
+Caso precise de qualquer informacao adicional, estamos a disposicao.
+`;
+
+      if (phone) {
+        const avisar = window.confirm(
+          "Reserva confirmada com sucesso ✅\nDeseja avisar o cliente no WhatsApp?"
+        );
+        if (avisar) openWhatsApp(phone, msg);
+      }
+
+      fetchReservas();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function cancelarReserva(id) {
+    if (!window.confirm("Cancelar esta reserva?")) return;
+
+    try {
+      setError("");
+
+      const res = await fetch(`/api/admin/reservas/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CANCEL" }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j?.error || "Erro ao cancelar");
+
+      fetchReservas();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // ✅ MARCAR ENTRADA PAGA (mensagem de pagamento)
+  async function marcarEntradaPaga(reserva) {
+    try {
+      setError("");
+      const id = reserva?._id;
+
+      const resp = await fetch(`/api/admin/reservas/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "MARK_ENTRY_PAID" }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) {
+        throw new Error(data?.error || `Falha ao marcar (HTTP ${resp.status})`);
+      }
+
+      // Atualiza UI sem refresh
+      setReservas((prev) =>
+        prev.map((r) =>
+          r._id === id
+            ? {
+                ...r,
+                entradaPaga: true,
+                entradaPagaEm: data?.reserva?.entradaPagaEm || new Date().toISOString(),
+              }
+            : r
+        )
+      );
+
+      const nome = reserva?.customerId?.nome || "Cliente";
+      const whatsapp = reserva?.customerId?.whatsapp;
+
+      const msg = `
+*Confirmacao de Pagamento Recebida*
+
+Ola ${nome}, tudo bem?
+
+Confirmamos o recebimento da entrada referente a sua reserva.
+
+Data do Evento: ${formatDateBR(reserva?.dataReserva)}
+Horario: ${reserva?.horarioInicio || "09:30"} as ${reserva?.horarioFim || "22:00"}
+Valor da Entrada: ${moneyBR(reserva?.valorEntrada)}
+
+Seu evento ja esta oficialmente garantido conosco.
+
+Estamos preparando tudo para proporcionar uma experiencia memoravel.
+
+Caso precise de qualquer informacao adicional, estamos a disposicao.
+`;
+
+      if (whatsapp) {
+        const ok = openWhatsApp(whatsapp, msg);
+        if (!ok) alert("Entrada marcada ✅, mas o WhatsApp do cliente esta invalido.");
+      } else {
+        alert("Entrada marcada ✅, mas nao encontrei o WhatsApp do cliente.");
+      }
+    } catch (err) {
+      console.error("marcarEntradaPaga:", err);
+      alert(err.message);
+    }
+  }
 
   useEffect(() => {
     fetchReservas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function fetchReservas() {
-  setLoading(true);
-  try {
-    const res = await fetch("/api/reservas?full=1", {
-      headers: {
-        "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY,
-      },
-    });
-
-    const j = await res.json();
-
-    if (!res.ok) {
-      alert(j?.error || "Erro ao carregar reservas.");
-      setRows([]);
-      return;
-    }
-
-    setRows(Array.isArray(j?.reservas) ? j.reservas : []);
-  } catch (e) {
-    alert("Erro ao carregar reservas.");
-    setRows([]);
-  } finally {
-    setLoading(false);
-  }
-}
-
-  const filtered = useMemo(() => {
-    let data = [...rows];
-
-    if (statusFilter !== "ALL") {
-      data = data.filter((r) => r.status === statusFilter);
-    }
-
-    if (dateFilter) {
-      data = data.filter((r) => r.dataReserva === dateFilter);
-    }    
-
-  const query = q.trim().toLowerCase();
-    if (query) {
-    data = data.filter((r) => {
-      const nome = (r.customerId?.nome || "").toLowerCase();
-      const whats = (r.customerId?.whatsapp || "").toLowerCase();
-      const dataR = (r.dataReserva || "");
-      return nome.includes(query) || whats.includes(query) || dataR.includes(query);
-  });
-}
-
-    // ordenação (por data_evento e createdAt se existir)
-    if (sort === "DATE_ASC") data.sort((a, b) => (a.dataReserva > b.dataReserva ? 1 : -1));
-    if (sort === "DATE_DESC") data.sort((a, b) => (a.dataReserva < b.dataReserva ? 1 : -1));
-    if (sort === "CREATED_DESC") data.sort((a, b) => ((a.createdAt || "") < (b.createdAt || "") ? 1 : -1));
-
-    return data;
-  }, [rows, statusFilter, q, dateFilter, sort]);
-
-  const counts = useMemo(() => {
-    const c = { ALL: rows.length, PENDING: 0, CONFIRMED: 0, CANCELLED: 0 };
-    rows.forEach((r) => (c[r.status] = (c[r.status] || 0) + 1));
-    return c;
-  }, [rows]);
-
-  async function confirmReserva(id) {
-    if (!window.confirm("Confirmar esta reserva?")) return;
-
-    const res = await fetch(`/api/reservas/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY,
-  },
-  body: JSON.stringify({ action: "confirm" }),
-});
-
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data?.error || "Erro ao confirmar.");
-      return;
-    }
-
-    fetchReservas();
-  }
-
-  async function cancelReserva(id) {
-  if (!window.confirm("Cancelar esta reserva?")) return;
-
-  try {
-    const res = await fetch(`/api/reservas/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY,
-      },
-      body: JSON.stringify({ action: "cancel" }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data?.error || "Erro ao cancelar reserva.");
-      return;
-    }
-
-    alert("Reserva cancelada com sucesso!");
-    fetchReservas(); // recarrega lista
-  } catch (err) {
-    alert("Erro ao conectar com o servidor.");
-  }
-}
-
-  async function markEntradaPaga(id) {
-    const valor = prompt("Valor da entrada (R$):", "200");
-      if (valor === null) return;
-
-    const valorEntrada = Number(valor.replace(",", ".").trim());
-
-      if (!valorEntrada || valorEntrada <= 0) {
-      alert("Digite um valor válido maior que zero.");
-      return;
-    }
-
-    const res = await fetch(`/api/reservas/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY,
-  },
-  
-  body: JSON.stringify({ action: "ENTRADA_PAGA", valorEntrada }),
-});
-
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data?.error || "Erro ao marcar entrada paga.");
-      return;
-    }
-
-    fetchReservas();
-  }
-
-  async function deleteReserva(id) {
-    const cliente = rows.find((r) => String(r._id) === String(id));
-    const nome = cliente?.nome ? ` ${cliente.nome}` : "";
-
-    const ok = window.confirm(
-      `Tem certeza que deseja excluir${nome}? Essa ação não pode ser desfeita.`
-    );
-    if (!ok) return;
-
-    const res = await fetch(`/api/reservas/${id}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data?.error || "Erro ao excluir.");
-      return;
-    }
-
-    fetchReservas();
-  }
-
-  function clearFilters() {
-    setStatusFilter("ALL");
-    setQ("");
-    setDateFilter("");
-    setSort("DATE_ASC");
-  }
-
   return (
-    <AdminLayout title="Reservas">
-      {/* Top filters */}
-      <div className={styles.topbar}>
-        <div className={styles.filters}>
-          <button
-            type="button"
-            className={`${styles.fbtn} ${statusFilter === "ALL" ? styles.fbtnActive : ""}`}
-            onClick={() => setStatusFilter("ALL")}
-          >
-            Todas <span className={styles.count}>{counts.ALL}</span>
-          </button>
+    <AdminLayout>
+      <div className={styles.adminWrap}>
+        <h1>Reservas</h1>
 
-          <button
-            type="button"
-            className={`${styles.fbtn} ${statusFilter === "PENDING" ? styles.fbtnActive : ""}`}
-            onClick={() => setStatusFilter("PENDING")}
-          >
-            Pendentes <span className={styles.count}>{counts.PENDING}</span>
-          </button>
+        {error && <div className={styles.alertError}>{error}</div>}
 
-          <button
-            type="button"
-            className={`${styles.fbtn} ${statusFilter === "CONFIRMED" ? styles.fbtnActive : ""}`}
-            onClick={() => setStatusFilter("CONFIRMED")}
-          >
-            Confirmadas <span className={styles.count}>{counts.CONFIRMED}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`${styles.fbtn} ${statusFilter === "CANCELLED" ? styles.fbtnActive : ""}`}
-            onClick={() => setStatusFilter("CANCELLED")}
-          >
-            Canceladas <span className={styles.count}>{counts.CANCELLED}</span>
-          </button>
-        </div>
-
-        <div className={styles.rightTools}>
-          <input
-            className={styles.search}
-            placeholder="Buscar nome/whats/data..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-
-          <input
-            className={styles.dateInput}
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            title="Filtrar por data"
-          />
-
-          <select className={styles.select} value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="DATE_ASC">Data (crescente)</option>
-            <option value="DATE_DESC">Data (decrescente)</option>
-            <option value="CREATED_DESC">Criadas (mais recentes)</option>
-          </select>
-
-          <button type="button" className={styles.ghostBtn} onClick={clearFilters}>
-            Limpar
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className={styles.card}>
         {loading ? (
-          <div style={{ padding: 16 }}>Carregando reservas...</div>
+          <p>Carregando...</p>
         ) : (
           <table className={styles.table}>
             <thead>
@@ -303,191 +242,111 @@ export default function ReservasAdminPage() {
                 <th>Cliente</th>
                 <th>WhatsApp</th>
                 <th>Data</th>
-                <th>Horário</th>
                 <th>Status</th>
-                <th style={{ textAlign: "right" }}>Ações</th>
+                <th>Entrada</th>
+                <th>Acoes</th>
               </tr>
             </thead>
 
             <tbody>
-              {filtered.map((r) => (
+              {reservas.map((r) => (
                 <tr key={r._id}>
-                  <td className={styles.tdStrong}>{r.customerId?.nome || "-"}</td>
-                  <td>{r.customerId?.whatsapp || "-"}</td>
-                  <td>{formatBRDate(r.dataReserva)}</td>
-                  <td>{(r.horarioInicio || "09:30") + " - " + (r.horarioFim || "22:00")}</td>
+                  <td>{r?.customerId?.nome || "-"}</td>
+                  <td>{r?.customerId?.whatsapp || "-"}</td>
+                  <td>{formatDateBR(r?.dataReserva)}</td>
 
                   <td>
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <span className={`${styles.badge} ${styles["b_" + r.status]}`}>
-                        {statusLabel(r.status)}
-                      </span>
+                    <span className={`${styles.badge} ${styles["b_" + r.status]}`}>
+                      {statusLabel(r?.status)}
+                    </span>
+                  </td>
 
-                      {Number(r.valorEntrada) > 0 && (
-                        <span className={styles.badgeMoney}>
-                          💰 Entrada paga
-                        </span>
+                  {/* ENTRADA */}
+                  <td>
+                    <div className={styles.entryBox}>
+                      <span className={styles.entryValue}>{moneyBR(r?.valorEntrada)}</span>
+
+                      {r?.entradaPaga ? (
+                        <small className={styles.entryPaid}>
+                          Pago em{" "}
+                          {r?.entradaPagaEm
+                            ? new Date(r.entradaPagaEm).toLocaleDateString("pt-BR")
+                            : "-"}
+                        </small>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.btnEntry}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            marcarEntradaPaga(r);
+                          }}
+                          title="Marcar entrada como paga"
+                        >
+                          Marcar
+                        </button>
                       )}
                     </div>
                   </td>
 
-                  <td style={{ textAlign: "right" }}>
-                    <div className={styles.actions}>
-                      <button
-                        type="button"
+                  {/* ACOES */}
+                  <td className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.btnSuccess}
+                      onClick={() => confirmarReserva(r._id)}
+                      disabled={r?.status === "CONFIRMED"}
+                      title="Confirmar"
+                    >
+                      ✔
+                    </button>
+
+                    <button
+                      type="button"
+                      className={styles.btnDanger}
+                      onClick={() => cancelarReserva(r._id)}
+                      disabled={r?.status === "CANCELLED"}
+                      title="Cancelar"
+                    >
+                      ✖
+                    </button>
+
+                    {r?.customerId?.whatsapp && (
+                      <a
                         className={styles.btn}
-                        onClick={() => setOpenId(r._id)}
-                        title="Ver detalhes"
+                        href={`https://wa.me/${normalizeBRPhone(r.customerId.whatsapp)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir WhatsApp"
                       >
-                        🔎
-                      </button>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M20.52 3.48A11.85 11.85 0 0012.06 0C5.53 0 .2 5.33.2 11.86c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.67a11.8 11.8 0 005.66 1.44h.01c6.53 0 11.86-5.33 11.86-11.86 0-3.17-1.23-6.15-3.41-8.33zM12.07 21.6h-.01a9.72 9.72 0 01-4.95-1.36l-.35-.2-3.8 1 1.01-3.7-.23-.38a9.7 9.7 0 01-1.49-5.15c0-5.36 4.36-9.72 9.73-9.72a9.66 9.66 0 016.88 2.85 9.67 9.67 0 012.85 6.87c0 5.36-4.36 9.72-9.72 9.72zm5.43-7.29c-.3-.15-1.76-.87-2.03-.97-.27-.1-.46-.15-.66.15-.2.3-.76.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.89-.8-1.5-1.8-1.67-2.1-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.66-1.6-.9-2.2-.24-.58-.48-.5-.66-.5h-.56c-.2 0-.52.07-.8.37-.27.3-1.05 1.02-1.05 2.5 0 1.47 1.08 2.9 1.23 3.1.15.2 2.12 3.23 5.14 4.52.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" />
+                        </svg>
+                      </a>
+                    )}
 
-                      <button
-                        type="button"
-                        className={styles.btn}
-                        onClick={() => confirmReserva(r._id)}
-                        disabled={r.status !== "PENDING"}
-                        title="Confirmar"
-                      >
-                        ✅
-                      </button>
-
-                      <button
-                        type="button"
-                        className={styles.btnDanger}
-                        onClick={() => cancelReserva(r._id)}
-                        disabled={r.status === "CANCELLED"}
-                        title="Cancelar"
-                      >
-                        ❌
-                      </button>
-
-                      <button
-                        type="button"
-                        className={styles.btnMoney}
-                        onClick={() => markEntradaPaga(r._id)}
-                        disabled={r.status === "CANCELLED"}
-                        title="Marcar entrada paga"
-                      >
-                        💰
-                      </button>
-
-                      <button
-                        type="button"
-                        className={styles.btn}
-                        onClick={() => openWhats(r)}
-                        title="Chamar no WhatsApp"
-                      >
-                        📲
-                      </button>
-
-                      <button
-                        type="button"
-                        className={styles.btnDanger}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deleteReserva(r._id);
-                        }}
-                        title="Excluir"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      onClick={() => alert(JSON.stringify(r, null, 2))}
+                      title="Ver detalhes"
+                    >
+                      ℹ
+                    </button>
                   </td>
                 </tr>
               ))}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={6} className={styles.empty}>
-                    Nenhuma reserva encontrada.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         )}
       </div>
-
-      {/* Modal de detalhes */}
-      {selected && (
-        <div className={styles.modalOverlay} onClick={() => setOpenId(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHead}>
-              <div>
-                <strong>Detalhes da Reserva</strong>
-                <div className={styles.modalSub}>ID #{String(selected._id)}</div>
-              </div>
-              <button type="button" className={styles.modalClose} onClick={() => setOpenId(null)}>
-                ✕
-              </button>
-            </div>
-
-            <div className={styles.modalGrid}>
-              <div className={styles.kv}>
-                <span>Cliente</span>
-                <strong>{selected.customerId?.nome || "-"}</strong>
-              </div>
-
-              <div className={styles.kv}>
-                <span>WhatsApp</span>
-                <strong>{selected.customerId?.whatsapp || "-"}</strong>
-              </div>
-
-              <div className={styles.kv}>
-                <span>Data</span>
-                <strong>{formatBRDate(selected.dataReserva)}</strong>
-              </div>
-
-              <div className={styles.kv}>
-                <span>Horário</span>
-                <strong>
-                  {(selected.horarioInicio || "09:30") + " - " + (selected.horarioFim || "22:00")}
-                </strong>
-              </div>
-
-              <div className={styles.kv}>
-                <span>Status</span>
-                <strong>{statusLabel(selected.status)}</strong>
-              </div>
-
-              <div className={styles.kv}>
-                <span>Entrada</span>
-                <strong>
-                  {Number(selected.valorEntrada) > 0
-                    ? `Paga ✅ (R$ ${selected.valorEntrada})`
-                    : "Não paga ❌"}
-                </strong>
-              </div>
-            </div>
-
-            <div className={styles.modalActions}>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                onClick={() => confirmReserva(selected._id)}
-                disabled={selected.status !== "PENDING"}
-              >
-                Confirmar
-              </button>
-
-              <button
-                type="button"
-                className={styles.dangerBtn}
-                onClick={() => cancelReserva(selected._id)}
-                disabled={selected.status === "CANCELLED"}
-              >
-                Cancelar
-              </button>
-
-              <button type="button" className={styles.ghostBtn} onClick={() => setOpenId(null)}>
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 }

@@ -1,5 +1,6 @@
 import { dbConnect } from "../../../lib/mongodb";
 import Reserva from "../../../models/Reserva";
+import Customer from "../../../models/Customer";
 
 function requireAdmin(req, res) {
   const key = req.headers["x-admin-key"];

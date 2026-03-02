@@ -110,21 +110,23 @@ export default function CalendarioPage() {
     try {
       setSubmitting(true);
 
-      const r = await fetch("/api/reservas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome,
-          whatsapp,
-          email,
-          dataReserva: toISODate(selected),
-          horarioInicio: "09:30",
-          horarioFim: "22:00",
-          valorEntrada: 0,
-          valorTotal: 0,
-          observacoes: "",
-        }),
-      });
+      const whatsappLimpo = String(whatsapp || "").replace(/\D/g, ""); // só números
+
+    const r = await fetch("/api/reservas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      nome,
+      whatsapp: whatsappLimpo,          // ✅ envia no formato 11999999999
+      email,
+      dataReserva: toISODate(selected), // ✅ YYYY-MM-DD
+      horarioInicio: "09:30",
+      horarioFim: "22:00",
+      valorEntrada: 0,
+      valorTotal: 0,
+      observacoes: "",
+    }),
+  });
 
       const j = await r.json();
 
