@@ -1,27 +1,107 @@
-import { dbConnect } from "../../../../lib/mongodb";
-import Reserva from "../../../../models/Reserva";
-import { COOKIE_NAME, verifyToken } from "../../../../lib/auth";
-import Customer from "../../../../models/Customer";
+
+import { getAdminDb } from "../../../../lib/firebaseAdmin";
+import { requireAdminCookie } from "../../../../lib/auth";
+
+// Converte datas do Firestore para JSON
+function toISO(value) {
+  if (!value) return null;
+
+  if (typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return value;
+}
+
+function serializeReserva(doc) {
+  const data = doc.data();
+
+  return {
+    ...data,
+    _id: doc.id,
+    id: doc.id,
+    createdAt: toISO(data.createdAt),
+    updatedAt: toISO(data.updatedAt),
+    entradaPagaEm: toISO(data.entradaPagaEm),
+  };
+}
 
 export default async function handler(req, res) {
-  await dbConnect();
+  // Apenas administradores autenticados
+  const admin = requireAdminCookie(req, res);
+  if (!admin) return;
 
-  // 🔐 auth via cookie (o mesmo do seu /api/auth/login)
-  const token = req.cookies?.[COOKIE_NAME];
-  const payload = token ? verifyToken(token) : null;
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
 
-  if (!payload || payload.role !== "admin") {
-    return res.status(401).json({ ok: false, error: "Não autorizado" });
+    return res.status(405).json({
+      ok: false,
+      error: "Método não permitido",
+    });
   }
 
-  if (req.method === "GET") {
-    const reservas = await Reserva.find({})
-      .sort({ createdAt: -1 })
-      .populate("customerId", "nome whatsapp email")
-      .lean();
+  try {
+    const db = getAdminDb();
 
-    return res.status(200).json({ ok: true, reservas });
+    // Busca todas as reservas
+    const snapshot = await db
+      .collection("reservas")
+      .get();
+
+    const reservas = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const reserva = serializeReserva(doc);
+
+        let cliente = null;
+
+        if (reserva.customerId) {
+          const clienteDoc = await db
+            .collection("clientes")
+            .doc(String(reserva.customerId))
+            .get();
+
+          if (clienteDoc.exists) {
+            cliente = {
+              _id: clienteDoc.id,
+              id: clienteDoc.id,
+              ...clienteDoc.data(),
+            };
+          }
+        }
+
+        // Mantém o formato do antigo populate do MongoDB
+        return {
+          ...reserva,
+          customerId: cliente,
+        };
+      })
+    );
+
+    // Reservas mais recentes primeiro
+    reservas.sort((a, b) => {
+      const dataA = new Date(a.createdAt || 0).getTime();
+      const dataB = new Date(b.createdAt || 0).getTime();
+
+      return dataB - dataA;
+    });
+
+    return res.status(200).json({
+      ok: true,
+      reservas,
+    });
+  } catch (error) {
+    console.error(
+      "Erro ao listar reservas no Firestore:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: "Erro ao buscar reservas.",
+    });
   }
-
-  return res.status(405).json({ ok: false, error: "Method not allowed" });
 }
