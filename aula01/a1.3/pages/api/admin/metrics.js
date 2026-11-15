@@ -1,101 +1,33 @@
-
-import { getAdminDb } from "../../../lib/firebaseAdmin";
+// pages/api/admin/metrics.js
+// API ADMIN: indicadores do painel. O formato da resposta deve ser preservado.
 import { requireAdminCookie } from "../../../lib/auth";
-
-const TIME_ZONE = "America/Sao_Paulo";
-
-function datePartsInBrazil(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value])
-  );
-
-  return {
-    year: Number(values.year),
-    month: Number(values.month),
-    day: Number(values.day),
-  };
-}
-
-function formatISO(year, month, day) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(
-    day
-  ).padStart(2, "0")}`;
-}
-
-function monthRangeISO() {
-  const { year, month } = datePartsInBrazil();
-
-  const startISO = formatISO(year, month, 1);
-  const nextMonth = new Date(Date.UTC(year, month, 1));
-
-  const endISO = formatISO(
-    nextMonth.getUTCFullYear(),
-    nextMonth.getUTCMonth() + 1,
-    1
-  );
-
-  return { startISO, endISO };
-}
-
-function todayISO() {
-  const { year, month, day } = datePartsInBrazil();
-  return formatISO(year, month, day);
-}
-
-function lastSixMonths() {
-  const { year, month } = datePartsInBrazil();
-  const months = [];
-
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(Date.UTC(year, month - 1 - i, 1));
-
-    months.push(
-      `${date.getUTCFullYear()}-${String(
-        date.getUTCMonth() + 1
-      ).padStart(2, "0")}`
-    );
-  }
-
-  return months;
-}
+import {
+  listarReservas,
+  todayInBrazil,
+  responderErro,
+  STATUS,
+} from "../../../lib/reservasService";
 
 function money(value) {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
 }
 
-function toISO(value) {
-  if (!value) return null;
-
-  if (typeof value.toDate === "function") {
-    return value.toDate().toISOString();
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  return value;
+function soma(lista, campo) {
+  return lista.reduce((total, r) => total + money(r[campo]), 0);
 }
 
-function serializeReserva(doc) {
-  const data = doc.data();
+// "YYYY-MM" do mês atual e dos 5 anteriores (fuso de São Paulo)
+function ultimosSeisMeses(hojeISO) {
+  const [year, month] = hojeISO.split("-").map(Number);
+  const meses = [];
 
-  return {
-    ...data,
-    _id: doc.id,
-    id: doc.id,
-    createdAt: toISO(data.createdAt),
-    updatedAt: toISO(data.updatedAt),
-    entradaPagaEm: toISO(data.entradaPagaEm),
-  };
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(Date.UTC(year, month - 1 - i, 1));
+    meses.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+
+  return meses;
 }
 
 export default async function handler(req, res) {
@@ -104,151 +36,67 @@ export default async function handler(req, res) {
 
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
-
-    return res.status(405).json({
-      ok: false,
-      error: "Método não permitido",
-    });
+    return res.status(405).json({ ok: false, error: "Método não permitido" });
   }
 
   try {
-    const db = getAdminDb();
+    const reservas = await listarReservas();
 
-    const snapshot = await db.collection("reservas").get();
-    const reservas = snapshot.docs.map(serializeReserva);
+    const hoje = todayInBrazil();
+    const mesAtual = hoje.slice(0, 7); // "YYYY-MM"
+    const meses = ultimosSeisMeses(hoje);
 
-    const { startISO, endISO } = monthRangeISO();
-    const today = todayISO();
-    const months = lastSixMonths();
+    const pendentesLista = reservas.filter((r) => r.status === STATUS.PENDING);
+    const confirmadasLista = reservas.filter((r) => r.status === STATUS.CONFIRMED);
+    const canceladasLista = reservas.filter((r) => r.status === STATUS.CANCELLED);
 
-    // 1. Quantidade de reservas por status
+    const confirmadasMes = confirmadasLista.filter(
+      (r) => typeof r.dataReserva === "string" && r.dataReserva.startsWith(mesAtual)
+    );
+
+    // 1. Quantidades
     const totalReservas = reservas.length;
-
-    const pendentes = reservas.filter(
-      (r) => r.status === "PENDING"
-    ).length;
-
-    const confirmadas = reservas.filter(
-      (r) => r.status === "CONFIRMED"
-    ).length;
-
-    const canceladas = reservas.filter(
-      (r) => r.status === "CANCELLED"
-    ).length;
-
-    const conversao =
-      totalReservas > 0 ? confirmadas / totalReservas : 0;
+    const pendentes = pendentesLista.length;
+    const confirmadas = confirmadasLista.length;
+    const canceladas = canceladasLista.length;
+    const conversao = totalReservas > 0 ? confirmadas / totalReservas : 0;
 
     // 2. Receitas confirmadas
-    const reservasConfirmadas = reservas.filter(
-      (r) => r.status === "CONFIRMED"
-    );
-
-    const receitaTotal = reservasConfirmadas.reduce(
-      (sum, r) => sum + money(r.valorTotal),
-      0
-    );
-
-    const entradasTotalConfirmadas = reservasConfirmadas.reduce(
-      (sum, r) => sum + money(r.valorEntrada),
-      0
-    );
-
-    const confirmadasMes = reservasConfirmadas.filter(
-      (r) =>
-        r.dataReserva >= startISO &&
-        r.dataReserva < endISO
-    );
-
-    const receitaMes = confirmadasMes.reduce(
-      (sum, r) => sum + money(r.valorTotal),
-      0
-    );
-
-    const entradasMesConfirmadas = confirmadasMes.reduce(
-      (sum, r) => sum + money(r.valorEntrada),
-      0
-    );
+    const receitaTotal = soma(confirmadasLista, "valorTotal");
+    const receitaMes = soma(confirmadasMes, "valorTotal");
+    const entradasTotalConfirmadas = soma(confirmadasLista, "valorEntrada");
+    const entradasMesConfirmadas = soma(confirmadasMes, "valorEntrada");
 
     // 3. Pendências
-    const reservasPendentes = reservas.filter(
-      (r) => r.status === "PENDING"
+    const receitaPendente = soma(pendentesLista, "valorTotal");
+    const entradasPendentesTotal = soma(pendentesLista, "valorEntrada");
+    const entradasPendentesNaoPagas = soma(
+      pendentesLista.filter((r) => r.entradaPaga === false),
+      "valorEntrada"
     );
-
-    const receitaPendente = reservasPendentes.reduce(
-      (sum, r) => sum + money(r.valorTotal),
-      0
-    );
-
-    const entradasPendentesTotal = reservasPendentes.reduce(
-      (sum, r) => sum + money(r.valorEntrada),
-      0
-    );
-
-    const entradasPendentesNaoPagas = reservasPendentes
-      .filter((r) => r.entradaPaga === false)
-      .reduce(
-        (sum, r) => sum + money(r.valorEntrada),
-        0
-      );
 
     // 4. Entradas efetivamente marcadas como pagas
-    const entradasPagas = reservas
-      .filter((r) => r.entradaPaga === true)
-      .reduce(
-        (sum, r) => sum + money(r.valorEntrada),
-        0
-      );
-
-    // 5. Próximas reservas
-    const proximasBase = reservas
-      .filter(
-        (r) =>
-          ["PENDING", "CONFIRMED"].includes(r.status) &&
-          r.dataReserva >= today
-      )
-      .sort((a, b) =>
-        a.dataReserva.localeCompare(b.dataReserva)
-      )
-      .slice(0, 10);
-
-    const proximas = await Promise.all(
-      proximasBase.map(async (reserva) => {
-        let cliente = null;
-
-        if (reserva.customerId) {
-          const clienteDoc = await db
-            .collection("clientes")
-            .doc(String(reserva.customerId))
-            .get();
-
-          if (clienteDoc.exists) {
-            const data = clienteDoc.data();
-
-            cliente = {
-              _id: clienteDoc.id,
-              id: clienteDoc.id,
-              nome: data.nome,
-              whatsapp: data.whatsapp,
-              email: data.email,
-            };
-          }
-        }
-
-        return {
-          ...reserva,
-          customerId: cliente,
-        };
-      })
+    const entradasPagas = soma(
+      reservas.filter((r) => r.entradaPaga === true),
+      "valorEntrada"
     );
 
-    // 6. Reservas dos últimos seis meses
-    const reservasPorMes = months.map((month) => ({
+    // 5. Próximas reservas ativas (já com o cliente em customerId)
+    const proximas = reservas
+      .filter(
+        (r) =>
+          [STATUS.PENDING, STATUS.CONFIRMED].includes(r.status) &&
+          typeof r.dataReserva === "string" &&
+          r.dataReserva >= hoje
+      )
+      .sort((a, b) => a.dataReserva.localeCompare(b.dataReserva))
+      .slice(0, 10);
+
+    // 6. Reservas por mês (últimos seis meses)
+    const reservasPorMes = meses.map((month) => ({
       month,
       total: reservas.filter(
-        (r) =>
-          typeof r.dataReserva === "string" &&
-          r.dataReserva.startsWith(month)
+        (r) => typeof r.dataReserva === "string" && r.dataReserva.startsWith(month)
       ).length,
     }));
 
@@ -276,12 +124,7 @@ export default async function handler(req, res) {
         reservasPorMes,
       },
     });
-  } catch (error) {
-    console.error("ERRO METRICS FIREBASE:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: "Erro ao gerar métricas.",
-    });
+  } catch (err) {
+    return responderErro(res, err, "Erro ao gerar métricas.");
   }
 }
