@@ -1,3 +1,4 @@
+// pages/calendario.js
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DayPicker } from "react-day-picker";
@@ -24,10 +25,29 @@ function parseISOToDate(iso) {
   return new Date(y, m - 1, d);
 }
 
+function moneyBR(value) {
+  const n = Number(value || 0);
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// "2026-11-16T22:30:00.000Z" -> "16/11 às 19:30"
+function formatPrazo(iso) {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return "";
+
+  const dia = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${dia} às ${hora}`;
+}
+
 export default function CalendarioPage() {
   const [selected, setSelected] = useState();
 
+  // 1 = escolher a data | 2 = preencher os dados | 3 = pedido concluído
   const [step, setStep] = useState(1);
+
+  // dados do pedido concluído, mostrados na etapa 3
+  const [confirmacao, setConfirmacao] = useState(null);
 
   // form
   const [nome, setNome] = useState("");
@@ -101,49 +121,56 @@ export default function CalendarioPage() {
       return;
     }
 
-    console.log("DATA SELECIONADA:", selected);
-    console.log("DATA ENVIADA:", toISODate(selected));
-
-
-    const data_evento = toISODate(selected);
+    const dataEscolhida = selected.toLocaleDateString("pt-BR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
 
     try {
       setSubmitting(true);
 
       const whatsappLimpo = String(whatsapp || "").replace(/\D/g, ""); // só números
 
-    const r = await fetch("/api/reservas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-      nome,
-      whatsapp: whatsappLimpo,          // ✅ envia no formato 11999999999
-      email,
-      dataReserva: toISODate(selected), // ✅ YYYY-MM-DD
-      horarioInicio: "09:30",
-      horarioFim: "22:00",
-      valorEntrada: 0,
-      valorTotal: 0,
-      observacoes: "",
-    }),
-  });
+      // Valores e horários são definidos pelo servidor; aqui vão só os dados do cliente.
+      const r = await fetch("/api/reservas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome,
+          whatsapp: whatsappLimpo, // ✅ envia no formato 11999999999
+          email,
+          dataReserva: toISODate(selected), // ✅ YYYY-MM-DD
+          observacoes: "",
+        }),
+      });
 
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
 
       if (!r.ok) {
         setMsg(j?.error || "Erro ao reservar.");
+        // Se alguém reservou a data nesse meio tempo, atualiza o calendário
+        if (r.status === 409) loadBusyDates();
         return;
       }
 
-      setMsg("✅ Reserva criada! Entraremos em contato para confirmação.");
+      // Guarda os dados para a tela de conclusão, que fica até o cliente fechar
+      setConfirmacao({
+        nome: nome.trim(),
+        data: dataEscolhida,
+        valorEntrada: j?.reserva?.valorEntrada,
+        valorTotal: j?.reserva?.valorTotal,
+        prazo: formatPrazo(j?.reserva?.expiraEm),
+      });
+      setStep(3);
 
-      // atualiza datas ocupadas e reseta
-      await loadBusyDates();
+      // limpa o formulário e atualiza as datas ocupadas
       setSelected(undefined);
-      setStep(1);
       setNome("");
       setWhatsapp("");
       setEmail("");
+      await loadBusyDates();
     } catch (err) {
       setMsg("Erro ao conectar com o servidor.");
     } finally {
@@ -223,17 +250,21 @@ const availableDateObjects = useMemo(() => {
         </section>
 
         <section className={styles.card}>
-          <h2 className={styles.cardTitle}>Confirmar reserva</h2>
+          <h2 className={styles.cardTitle}>
+            {step === 3 ? "Pedido recebido" : "Confirmar reserva"}
+          </h2>
 
-          <div className={styles.summary}>
-            <div>
-              <span>Data:</span>{" "}
-              <strong>{selected ? selected.toLocaleDateString("pt-BR") : "—"}</strong>
+          {step !== 3 && (
+            <div className={styles.summary}>
+              <div>
+                <span>Data:</span>{" "}
+                <strong>{selected ? selected.toLocaleDateString("pt-BR") : "—"}</strong>
+              </div>
+              <div>
+                <span>Horário:</span> <strong>09:30 - 22:00</strong>
+              </div>
             </div>
-            <div>
-              <span>Horário:</span> <strong>09:30 - 22:00</strong>
-            </div>
-          </div>
+          )}
 
           {step === 1 && (
             <button
@@ -309,9 +340,56 @@ const availableDateObjects = useMemo(() => {
             </section>
           )}
 
-          <p className={styles.hint}>
-            (Próximo passo pode ser: escolher pacote, preencher dados e pagar sinal/PIX.)
-          </p>
+          {step === 3 && confirmacao && (
+            <section className={styles.formWrapper}>
+              <div className={styles.formCard} role="status">
+                <h2 className={styles.formTitle}>
+                  {confirmacao.nome ? `Pronto, ${confirmacao.nome.split(" ")[0]}!` : "Pronto!"}
+                </h2>
+                <p className={styles.formSubtitle}>
+                  Recebemos o seu pedido e a data está guardada para você por 24 horas.
+                </p>
+
+                <div className={styles.summary}>
+                  <div>
+                    <span>Data:</span> <strong>{confirmacao.data}</strong>
+                  </div>
+                  <div>
+                    <span>Horário:</span> <strong>09:30 - 22:00</strong>
+                  </div>
+                  <div>
+                    <span>Sinal para confirmar:</span>{" "}
+                    <strong>{moneyBR(confirmacao.valorEntrada)}</strong>
+                  </div>
+                  <div>
+                    <span>Valor total:</span> <strong>{moneyBR(confirmacao.valorTotal)}</strong>
+                  </div>
+                  {confirmacao.prazo && (
+                    <div>
+                      <span>Pagar o sinal até:</span> <strong>{confirmacao.prazo}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <p className={styles.hint}>
+                  Vamos falar com você pelo WhatsApp para combinar o pagamento do sinal. Sem o
+                  sinal nesse prazo, a data volta a ficar disponível.
+                </p>
+
+                <button
+                  type="button"
+                  className={styles.cta}
+                  onClick={() => {
+                    setConfirmacao(null);
+                    setStep(1);
+                    setMsg("");
+                  }}
+                >
+                  Fazer outra reserva
+                </button>
+              </div>
+            </section>
+          )}
         </section>
       </div>
     </main>
