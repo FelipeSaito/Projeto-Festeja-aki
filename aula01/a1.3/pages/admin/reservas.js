@@ -126,6 +126,14 @@ function Icone({ nome }) {
     );
   }
 
+  if (nome === "excluir") {
+    return (
+      <svg {...comum} strokeWidth={2}>
+        <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+      </svg>
+    );
+  }
+
   if (nome === "atualizar") {
     return (
       <svg {...comum} strokeWidth={2}>
@@ -150,6 +158,7 @@ export default function AdminReservasPage() {
   const [agoraMs, setAgoraMs] = useState(() => Date.now());
   const [filtro, setFiltro] = useState("ALL");
   const [detalhe, setDetalhe] = useState(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   async function fetchReservas() {
     try {
@@ -309,6 +318,64 @@ Caso precise de qualquer informação adicional, estamos à disposição.
       fetchReservas();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  // Chama a API que apaga uma reserva cancelada. Lança erro se falhar.
+  async function pedirExclusao(id) {
+    const res = await fetch(`/api/admin/reservas/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) throw new Error(j?.error || "Erro ao excluir");
+  }
+
+  // 🗑 EXCLUIR UMA RESERVA CANCELADA (apaga do banco, sem volta)
+  async function excluirReserva(reserva) {
+    const id = reserva?._id;
+    if (!id) return;
+
+    const nome = reserva?.customerId?.nome || "cliente";
+    const ok = window.confirm(
+      `Excluir a reserva cancelada de ${nome} (${formatDateBR(reserva?.dataReserva)})?\n\n` +
+        "Ela será apagada de vez e não poderá ser recuperada."
+    );
+    if (!ok) return;
+
+    try {
+      setError("");
+      await pedirExclusao(id);
+      setReservas((prev) => prev.filter((r) => r._id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // 🗑 EXCLUIR TODAS AS CANCELADAS
+  async function excluirCanceladas() {
+    const canceladas = reservas.filter((r) => r?.status === "CANCELLED");
+    if (canceladas.length === 0) return;
+
+    const ok = window.confirm(
+      `Excluir as ${canceladas.length} reserva(s) cancelada(s)?\n\n` +
+        "Elas serão apagadas de vez e não poderão ser recuperadas."
+    );
+    if (!ok) return;
+
+    try {
+      setError("");
+      setExcluindo(true);
+
+      for (const r of canceladas) {
+        await pedirExclusao(r._id);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExcluindo(false);
+      fetchReservas();
     }
   }
 
@@ -475,6 +542,19 @@ Caso precise de qualquer informação adicional, estamos à disposição.
 
         <BotaoNotificacoes />
 
+        {filtro === "CANCELLED" && contagem.CANCELLED > 0 && (
+          <div className={styles.rightTools}>
+            <button
+              type="button"
+              className={styles.dangerBtn}
+              onClick={excluirCanceladas}
+              disabled={excluindo}
+            >
+              {excluindo ? "Excluindo..." : `Excluir todas as canceladas (${contagem.CANCELLED})`}
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className={styles.alertError} role="alert">
             {error}
@@ -629,6 +709,18 @@ Caso precise de qualquer informação adicional, estamos à disposição.
                             >
                               <Icone nome="cancelar" />
                               <span className={styles.btnLabel}>Cancelar</span>
+                            </button>
+                          )}
+
+                          {r?.status === "CANCELLED" && (
+                            <button
+                              type="button"
+                              className={styles.btnDanger}
+                              onClick={() => excluirReserva(r)}
+                              title="Excluir esta reserva cancelada"
+                            >
+                              <Icone nome="excluir" />
+                              <span className={styles.btnLabel}>Excluir</span>
                             </button>
                           )}
 

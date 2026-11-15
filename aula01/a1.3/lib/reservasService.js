@@ -471,6 +471,53 @@ export async function atualizarReserva(id, action) {
 }
 
 // ============================================================
+// Exclusão definitiva (somente reservas canceladas)
+// ============================================================
+
+// Apaga do banco uma reserva CANCELADA, para limpar o painel.
+// Reservas pendentes ou confirmadas nunca são excluídas: primeiro é preciso cancelar.
+export async function excluirReserva(id) {
+  if (typeof id !== "string" || !id) {
+    throw new ReservaError("ID da reserva inválido.");
+  }
+
+  const db = getAdminDb();
+  const reservaRef = db.collection(COL_RESERVAS).doc(id);
+
+  await db.runTransaction(async (tx) => {
+    const reservaDoc = await tx.get(reservaRef);
+
+    if (!reservaDoc.exists) {
+      throw new ReservaError("Reserva não encontrada.", 404);
+    }
+
+    const reserva = reservaDoc.data();
+
+    if (reserva.status !== STATUS.CANCELLED) {
+      throw new ReservaError("Só é possível excluir reservas canceladas.", 409);
+    }
+
+    // Por segurança: se ainda existir um bloqueio da data apontando para esta
+    // reserva (dado inconsistente), ele é removido junto.
+    let diaRef = null;
+    let diaDoc = null;
+
+    if (parseDateISO(reserva.dataReserva)) {
+      diaRef = db.collection(COL_DIAS).doc(reserva.dataReserva);
+      diaDoc = await tx.get(diaRef);
+    }
+
+    if (diaDoc && diaDoc.exists && diaDoc.data().reservaId === id) {
+      tx.delete(diaRef);
+    }
+
+    tx.delete(reservaRef);
+  });
+
+  return { id };
+}
+
+// ============================================================
 // Limpeza de reservas vencidas
 // ============================================================
 
