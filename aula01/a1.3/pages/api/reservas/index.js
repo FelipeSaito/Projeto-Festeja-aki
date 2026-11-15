@@ -6,6 +6,18 @@ import {
   criarReserva,
   responderErro,
 } from "../../../lib/reservasService";
+import { enviarNotificacao } from "../../../lib/push";
+
+const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+// "2026-11-21" -> "sáb, 21/11"
+function dataCurta(dataISO) {
+  const [ano, mes, dia] = String(dataISO || "").split("-").map(Number);
+  if (!ano || !mes || !dia) return String(dataISO || "");
+
+  const semana = DIAS[new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()];
+  return `${semana}, ${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}`;
+}
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -30,6 +42,24 @@ export default async function handler(req, res) {
         dataReserva,
         observacoes,
       });
+
+      // Avisa os aparelhos do painel. Uma falha aqui não pode derrubar a reserva.
+      try {
+        const cliente = String(nome || "").trim().slice(0, 60) || "Um cliente";
+
+        const resultado = await enviarNotificacao({
+          title: "Nova reserva",
+          body: `${cliente} escolheu ${dataCurta(reserva.dataReserva)}. Aguardando o sinal.`,
+          url: "/admin/reservas",
+        });
+
+        // Só a contagem, sem dados do cliente
+        console.log(
+          `Notificações da nova reserva: ${resultado.enviadas} enviada(s), ${resultado.falhas} falha(s).`
+        );
+      } catch (err) {
+        console.error("Falha ao notificar nova reserva.", err?.message || err);
+      }
 
       return res.status(201).json({ ok: true, reserva });
     } catch (err) {
