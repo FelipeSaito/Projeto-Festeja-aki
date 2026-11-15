@@ -6,8 +6,7 @@ import styles from "../styles/admin.module.css";
 
 const LINKS = [
   { href: "/admin/reservas", label: "Reservas", icon: "reservas" },
-  { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
-  { href: "/admin/metrics", label: "Métricas", icon: "metricas" },
+  { href: "/admin/dashboard", label: "Resumo", icon: "metricas" },
 ];
 
 function Icone({ nome }) {
@@ -31,17 +30,6 @@ function Icone({ nome }) {
     );
   }
 
-  if (nome === "dashboard") {
-    return (
-      <svg {...comum}>
-        <rect x="3" y="3" width="8" height="8" rx="2" />
-        <rect x="13" y="3" width="8" height="8" rx="2" />
-        <rect x="3" y="13" width="8" height="8" rx="2" />
-        <rect x="13" y="13" width="8" height="8" rx="2" />
-      </svg>
-    );
-  }
-
   if (nome === "metricas") {
     return (
       <svg {...comum}>
@@ -50,30 +38,16 @@ function Icone({ nome }) {
     );
   }
 
-  // sair
-  return (
-    <svg {...comum}>
-      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9" />
-    </svg>
-  );
+  return null;
 }
 
 export default function AdminLayout({
   title = "Admin",
   subtitle = "Gerencie suas reservas com rapidez.",
+  actions = null,
   children,
 }) {
   const router = useRouter();
-
-  async function sair() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } catch {
-      // mesmo se a chamada falhar, volta para a tela de login
-    }
-
-    router.push("/admin/login");
-  }
 
   return (
     <div className={styles.shell}>
@@ -122,13 +96,6 @@ export default function AdminLayout({
             );
           })}
         </nav>
-
-        <div className={styles.sidebarFooter}>
-          <button type="button" className={styles.logout} onClick={sair}>
-            <Icone nome="sair" />
-            Sair
-          </button>
-        </div>
       </aside>
 
       <main className={styles.main}>
@@ -139,6 +106,8 @@ export default function AdminLayout({
             <h1 className={styles.h1}>{title}</h1>
             {subtitle && <p className={styles.p}>{subtitle}</p>}
           </div>
+
+          {actions && <div className={styles.headerRight}>{actions}</div>}
         </header>
 
         <section className={styles.content}>{children}</section>

@@ -86,6 +86,61 @@ function openWhatsApp(phoneRaw, message) {
   return true;
 }
 
+/* ===== Ícones dos botões ===== */
+function Icone({ nome }) {
+  const comum = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.4,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+
+  if (nome === "confirmar") {
+    return (
+      <svg {...comum}>
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    );
+  }
+
+  if (nome === "cancelar") {
+    return (
+      <svg {...comum}>
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    );
+  }
+
+  if (nome === "detalhes") {
+    return (
+      <svg {...comum} strokeWidth={2}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v6M12 7.5v.01" />
+      </svg>
+    );
+  }
+
+  if (nome === "atualizar") {
+    return (
+      <svg {...comum} strokeWidth={2}>
+        <path d="M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6" />
+      </svg>
+    );
+  }
+
+  // whatsapp
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.52 3.48A11.85 11.85 0 0012.06 0C5.53 0 .2 5.33.2 11.86c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.67a11.8 11.8 0 005.66 1.44h.01c6.53 0 11.86-5.33 11.86-11.86 0-3.17-1.23-6.15-3.41-8.33zM12.07 21.6h-.01a9.72 9.72 0 01-4.95-1.36l-.35-.2-3.8 1 1.01-3.7-.23-.38a9.7 9.7 0 01-1.49-5.15c0-5.36 4.36-9.72 9.73-9.72a9.66 9.66 0 016.88 2.85 9.67 9.67 0 012.85 6.87c0 5.36-4.36 9.72-9.72 9.72zm5.43-7.29c-.3-.15-1.76-.87-2.03-.97-.27-.1-.46-.15-.66.15-.2.3-.76.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.89-.8-1.5-1.8-1.67-2.1-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.66-1.6-.9-2.2-.24-.58-.48-.5-.66-.5h-.56c-.2 0-.52.07-.8.37-.27.3-1.05 1.02-1.05 2.5 0 1.47 1.08 2.9 1.23 3.1.15.2 2.12 3.23 5.14 4.52.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" />
+    </svg>
+  );
+}
+
 export default function AdminReservasPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -383,32 +438,38 @@ Caso precise de qualquer informação adicional, estamos à disposição.
     filtro === "ALL" ? reservas : reservas.filter((r) => r?.status === filtro);
 
   return (
-    <AdminLayout title="Reservas" subtitle="Acompanhe os pedidos e registre o sinal.">
-      <div className={styles.adminWrap}>
-        <div className={styles.toolbar}>
-          <div className={styles.filters} role="group" aria-label="Filtrar por status">
-            {FILTROS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                className={`${styles.fbtn} ${filtro === f.id ? styles.fbtnActive : ""}`}
-                onClick={() => setFiltro(f.id)}
-                aria-pressed={filtro === f.id}
-              >
-                {f.label}
-                <span className={styles.count}>{contagem[f.id]}</span>
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            className={styles.ghostBtn}
-            onClick={fetchReservas}
-            disabled={loading}
-          >
+    <AdminLayout
+      title="Reservas"
+      subtitle="Acompanhe os pedidos e registre o sinal."
+      actions={
+        <button
+          type="button"
+          className={styles.headerBtn}
+          onClick={fetchReservas}
+          disabled={loading}
+          aria-label="Atualizar reservas"
+        >
+          <Icone nome="atualizar" />
+          <span className={styles.headerBtnLabel}>
             {loading ? "Atualizando..." : "Atualizar"}
-          </button>
+          </span>
+        </button>
+      }
+    >
+      <div className={styles.adminWrap}>
+        <div className={styles.filters} role="group" aria-label="Filtrar por status">
+          {FILTROS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`${styles.fbtn} ${filtro === f.id ? styles.fbtnActive : ""}`}
+              onClick={() => setFiltro(f.id)}
+              aria-pressed={filtro === f.id}
+            >
+              {f.label}
+              <span className={styles.count}>{contagem[f.id]}</span>
+            </button>
+          ))}
         </div>
 
         {error && (
@@ -544,31 +605,29 @@ Caso precise de qualquer informação adicional, estamos à disposição.
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            className={styles.btnSuccess}
-                            onClick={() => confirmarReserva(r._id)}
-                            disabled={r?.status === "CONFIRMED" || r?.status === "CANCELLED"}
-                            aria-label="Confirmar sem registrar o sinal"
-                            title={
-                              r?.status === "CANCELLED"
-                                ? "Reserva cancelada não pode ser confirmada"
-                                : "Confirmar sem registrar o sinal"
-                            }
-                          >
-                            ✔
-                          </button>
+                          {r?.status === "PENDING" && (
+                            <button
+                              type="button"
+                              className={styles.btnSuccess}
+                              onClick={() => confirmarReserva(r._id)}
+                              title="Confirmar sem registrar o sinal"
+                            >
+                              <Icone nome="confirmar" />
+                              <span className={styles.btnLabel}>Confirmar</span>
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            className={styles.btnDanger}
-                            onClick={() => cancelarReserva(r._id)}
-                            disabled={r?.status === "CANCELLED"}
-                            aria-label="Cancelar reserva"
-                            title="Cancelar"
-                          >
-                            ✖
-                          </button>
+                          {r?.status !== "CANCELLED" && (
+                            <button
+                              type="button"
+                              className={styles.btnDanger}
+                              onClick={() => cancelarReserva(r._id)}
+                              title="Cancelar reserva"
+                            >
+                              <Icone nome="cancelar" />
+                              <span className={styles.btnLabel}>Cancelar</span>
+                            </button>
+                          )}
 
                           {r?.customerId?.whatsapp && (
                             <a
@@ -576,19 +635,10 @@ Caso precise de qualquer informação adicional, estamos à disposição.
                               href={`https://wa.me/${normalizeBRPhone(r.customerId.whatsapp)}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              aria-label="Abrir conversa no WhatsApp"
-                              title="Abrir WhatsApp"
+                              title="Abrir conversa no WhatsApp"
                             >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                                aria-hidden="true"
-                              >
-                                <path d="M20.52 3.48A11.85 11.85 0 0012.06 0C5.53 0 .2 5.33.2 11.86c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.67a11.8 11.8 0 005.66 1.44h.01c6.53 0 11.86-5.33 11.86-11.86 0-3.17-1.23-6.15-3.41-8.33zM12.07 21.6h-.01a9.72 9.72 0 01-4.95-1.36l-.35-.2-3.8 1 1.01-3.7-.23-.38a9.7 9.7 0 01-1.49-5.15c0-5.36 4.36-9.72 9.73-9.72a9.66 9.66 0 016.88 2.85 9.67 9.67 0 012.85 6.87c0 5.36-4.36 9.72-9.72 9.72zm5.43-7.29c-.3-.15-1.76-.87-2.03-.97-.27-.1-.46-.15-.66.15-.2.3-.76.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.89-.8-1.5-1.8-1.67-2.1-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.66-1.6-.9-2.2-.24-.58-.48-.5-.66-.5h-.56c-.2 0-.52.07-.8.37-.27.3-1.05 1.02-1.05 2.5 0 1.47 1.08 2.9 1.23 3.1.15.2 2.12 3.23 5.14 4.52.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" />
-                              </svg>
+                              <Icone nome="whatsapp" />
+                              <span className={styles.btnLabel}>WhatsApp</span>
                             </a>
                           )}
 
@@ -596,10 +646,10 @@ Caso precise de qualquer informação adicional, estamos à disposição.
                             type="button"
                             className={styles.btn}
                             onClick={() => setDetalhe(r)}
-                            aria-label="Ver detalhes da reserva"
-                            title="Ver detalhes"
+                            title="Ver detalhes da reserva"
                           >
-                            ℹ
+                            <Icone nome="detalhes" />
+                            <span className={styles.btnLabel}>Detalhes</span>
                           </button>
                         </div>
                       </td>
@@ -634,7 +684,7 @@ Caso precise de qualquer informação adicional, estamos à disposição.
                   onClick={() => setDetalhe(null)}
                   aria-label="Fechar detalhes"
                 >
-                  ✖
+                  <Icone nome="cancelar" />
                 </button>
               </div>
 

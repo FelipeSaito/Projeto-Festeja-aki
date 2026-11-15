@@ -185,6 +185,33 @@
   margin-left: auto;
 }
 
+.headerBtn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 2px solid var(--fa-petroleo);
+  background: transparent;
+  color: var(--fa-petroleo);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.headerBtn:hover{
+  background: var(--fa-petroleo);
+  color: #ffffff;
+}
+
+.headerBtn:disabled{
+  opacity: .6;
+  cursor: default;
+}
+
 .search{
   width: 260px;
   padding: 10px 12px;
@@ -573,6 +600,11 @@
   flex-shrink: 0;
 }
 
+/* O texto dos botões de ação só aparece no celular */
+.btnLabel{
+  display: none;
+}
+
 .btn:hover{
   border-color: var(--fa-petroleo-claro);
   background: var(--fa-fundo);
@@ -680,6 +712,9 @@
   font-size: 16px;
   cursor: pointer;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modalClose:hover{
@@ -891,19 +926,67 @@
 
   .actions .primaryBtn{
     flex: 1 1 100%;
-    min-height: 46px;
+    min-height: 48px;
+    font-size: 15px;
   }
 
+  /* Botões de ação com ícone e texto, dividindo a largura do cartão */
   .btn,
   .btnSuccess,
   .btnDanger,
   .btnMoney{
-    width: 46px;
-    height: 46px;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 58px;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .btnLabel{
+    display: block;
+  }
+
+  /* Filtros em uma linha só, ocupando toda a largura */
+  .filters{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .fbtn{
-    min-height: 42px;
+    flex-direction: column-reverse;
+    justify-content: center;
+    gap: 0;
+    min-height: 58px;
+    padding: 6px 2px;
+    border-radius: 14px;
+    font-size: 12px;
+  }
+
+  .count,
+  .fbtnActive .count{
+    margin-left: 0;
+    padding: 0;
+    background: transparent;
+    font-size: 20px;
+    line-height: 1.2;
+  }
+
+  .fbtnActive .count{
+    color: var(--fa-amarelo);
+  }
+
+  .headerBtn{
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .headerBtnLabel{
+    display: none;
   }
 
   .empty{
