@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AdminLayout from "../../components/AdminLayout";
+import BotaoNotificacoes from "../../components/BotaoNotificacoes";
 import styles from "../../styles/admin.module.css";
 
 const FILTROS = [
@@ -471,6 +472,8 @@ Caso precise de qualquer informação adicional, estamos à disposição.
             </button>
           ))}
         </div>
+
+        <BotaoNotificacoes />
 
         {error && (
           <div className={styles.alertError} role="alert">
