@@ -1,6 +1,6 @@
 // pages/api/admin/push/subscribe.js
 // API ADMIN: guarda (POST) ou remove (DELETE) a inscrição de notificações
-// do aparelho que está usando o painel.
+// do aparelho que está usando o painel. GET devolve só a contagem (diagnóstico).
 import crypto from "crypto";
 import { requireAdminCookie } from "../../../../lib/auth";
 import { getAdminDb } from "../../../../lib/firebaseAdmin";
@@ -28,6 +28,21 @@ export default async function handler(req, res) {
 
   try {
     const db = getAdminDb();
+
+    // Diagnóstico: quantos aparelhos estão inscritos e em qual banco.
+    // "banco" é só uma impressão digital do projeto, para comparar ambientes.
+    if (req.method === "GET") {
+      const snapshot = await db.collection(COL_INSCRICOES).select().get();
+      const projeto = String(process.env.FIREBASE_PROJECT_ID || "")
+        .trim()
+        .replace(/^["']|["']$/g, "");
+
+      return res.status(200).json({
+        ok: true,
+        inscritos: snapshot.size,
+        banco: crypto.createHash("sha256").update(projeto).digest("hex").slice(0, 8),
+      });
+    }
 
     if (req.method === "POST") {
       const { endpoint, keys } = req.body || {};
@@ -69,10 +84,11 @@ export default async function handler(req, res) {
       }
 
       await db.collection(COL_INSCRICOES).doc(idDaInscricao(endpoint)).delete();
+      console.log("Inscrição de notificações removida a pedido do aparelho.");
       return res.status(200).json({ ok: true });
     }
 
-    res.setHeader("Allow", "POST, DELETE");
+    res.setHeader("Allow", "GET, POST, DELETE");
     return res.status(405).json({ ok: false, error: "Método não permitido" });
   } catch (err) {
     console.error("Erro ao salvar inscrição de notificações.", err?.message || err);
