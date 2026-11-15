@@ -52,6 +52,18 @@ export default function BotaoNotificacoes() {
       try {
         const registro = await navigator.serviceWorker.ready;
         const inscricao = await registro.pushManager.getSubscription();
+
+        // Se o aparelho já está inscrito, regrava a inscrição no servidor.
+        // Assim ela volta sozinha caso o registro tenha sido apagado do banco.
+        if (inscricao) {
+          fetch("/api/admin/push/subscribe", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(inscricao.toJSON()),
+          }).catch(() => {});
+        }
+
         if (!cancelado) setEstado(inscricao ? "ativo" : "inativo");
       } catch {
         if (!cancelado) setEstado("inativo");
