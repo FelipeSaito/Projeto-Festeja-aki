@@ -4,6 +4,13 @@ import { useRouter } from "next/router";
 import AdminLayout from "../../components/AdminLayout";
 import styles from "../../styles/admin.module.css";
 
+const FILTROS = [
+  { id: "ALL", label: "Todas" },
+  { id: "PENDING", label: "Pendentes" },
+  { id: "CONFIRMED", label: "Confirmadas" },
+  { id: "CANCELLED", label: "Canceladas" },
+];
+
 function statusLabel(status) {
   if (status === "CONFIRMED") return "Confirmada";
   if (status === "PENDING") return "Pendente";
@@ -16,6 +23,13 @@ function formatDateBR(yyyy_mm_dd) {
   const [y, m, d] = String(yyyy_mm_dd).split("-");
   if (!y || !m || !d) return String(yyyy_mm_dd);
   return `${d}/${m}/${y}`;
+}
+
+function formatDateTimeBR(iso) {
+  if (!iso) return "-";
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "-";
+  return data.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function moneyBR(value) {
@@ -78,6 +92,8 @@ export default function AdminReservasPage() {
   const [reservas, setReservas] = useState([]);
   const [error, setError] = useState("");
   const [agoraMs, setAgoraMs] = useState(() => Date.now());
+  const [filtro, setFiltro] = useState("ALL");
+  const [detalhe, setDetalhe] = useState(null);
 
   async function fetchReservas() {
     try {
@@ -344,181 +360,354 @@ Caso precise de qualquer informação adicional, estamos à disposição.
     return () => clearInterval(timer);
   }, []);
 
+  // Fecha a janela de detalhes com a tecla Esc
+  useEffect(() => {
+    if (!detalhe) return undefined;
+
+    function aoTeclar(event) {
+      if (event.key === "Escape") setDetalhe(null);
+    }
+
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [detalhe]);
+
+  const contagem = {
+    ALL: reservas.length,
+    PENDING: reservas.filter((r) => r?.status === "PENDING").length,
+    CONFIRMED: reservas.filter((r) => r?.status === "CONFIRMED").length,
+    CANCELLED: reservas.filter((r) => r?.status === "CANCELLED").length,
+  };
+
+  const visiveis =
+    filtro === "ALL" ? reservas : reservas.filter((r) => r?.status === filtro);
+
   return (
-    <AdminLayout>
+    <AdminLayout title="Reservas" subtitle="Acompanhe os pedidos e registre o sinal.">
       <div className={styles.adminWrap}>
-        <h1>Reservas</h1>
+        <div className={styles.toolbar}>
+          <div className={styles.filters} role="group" aria-label="Filtrar por status">
+            {FILTROS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`${styles.fbtn} ${filtro === f.id ? styles.fbtnActive : ""}`}
+                onClick={() => setFiltro(f.id)}
+                aria-pressed={filtro === f.id}
+              >
+                {f.label}
+                <span className={styles.count}>{contagem[f.id]}</span>
+              </button>
+            ))}
+          </div>
 
-        {error && <div className={styles.alertError}>{error}</div>}
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={fetchReservas}
+            disabled={loading}
+          >
+            {loading ? "Atualizando..." : "Atualizar"}
+          </button>
+        </div>
 
-        {loading ? (
-          <p>Carregando...</p>
+        {error && (
+          <div className={styles.alertError} role="alert">
+            {error}
+          </div>
+        )}
+
+        {loading && reservas.length === 0 ? (
+          <p className={styles.loading}>Carregando reservas...</p>
         ) : (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>WhatsApp</th>
-                <th>Data</th>
-                <th>Status</th>
-                <th>Entrada</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
+          <div className={styles.card}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>WhatsApp</th>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th>Entrada</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
 
-            <tbody>
-              {reservas.map((r) => {
-                const prazoCorrendo = temPrazoCorrendo(r);
-                const prazo = prazoCorrendo ? textoPrazo(r.expiraEm, agoraMs) : null;
-                const vencida = prazoCorrendo && Date.parse(r.expiraEm) <= agoraMs;
-
-                return (
-                  <tr key={r._id}>
-                    <td>{r?.customerId?.nome || "-"}</td>
-                    <td>{r?.customerId?.whatsapp || "-"}</td>
-                    <td>{formatDateBR(r?.dataReserva)}</td>
-
-                    <td>
-                      <span className={`${styles.badge} ${styles["b_" + r.status]}`}>
-                        {statusLabel(r?.status)}
-                      </span>
-                      {prazo && (
-                        <>
-                          <br />
-                          <small
-                            title={
-                              vencida
-                                ? "O sinal não foi registrado em 24h. A data já aparece livre no calendário."
-                                : "Tempo para registrar o sinal antes de a data ser liberada"
-                            }
-                          >
-                            {vencida ? "⚠ " : "⏳ "}
-                            {prazo}
-                          </small>
-                        </>
-                      )}
-                      {r?.canceladaAutomaticamente && (
-                        <>
-                          <br />
-                          <small title="Cancelada porque o sinal não foi pago em 24h">
-                            Prazo do sinal vencido
-                          </small>
-                        </>
-                      )}
-                    </td>
-
-                    {/* ENTRADA */}
-                    <td>
-                      <div className={styles.entryBox}>
-                        <span className={styles.entryValue}>{moneyBR(r?.valorEntrada)}</span>
-
-                        {r?.entradaPaga ? (
-                          <>
-                            <small className={styles.entryPaid}>
-                              Pago em{" "}
-                              {r?.entradaPagaEm
-                                ? new Date(r.entradaPagaEm).toLocaleDateString("pt-BR")
-                                : "-"}
-                            </small>
-                            <button
-                              type="button"
-                              className={styles.btnUndo}
-                              onClick={() => desmarcarEntradaPaga(r)}
-                              title="Desfazer registro de pagamento"
-                            >
-                              Desfazer
-                            </button>
-                          </>
-                        ) : r?.status === "CANCELLED" ? (
-                          <small>—</small>
-                        ) : r?.status === "PENDING" ? (
-                          <small title='Use "Sinal recebido → Confirmar" em Ações'>
-                            Aguardando sinal
-                          </small>
-                        ) : (
-                          <button
-                            type="button"
-                            className={styles.btnEntry}
-                            onClick={() => marcarEntradaPaga(r)}
-                            title="Registrar o sinal de uma reserva já confirmada"
-                          >
-                            Marcar
-                          </button>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* AÇÕES */}
-                    <td className={styles.actions}>
-                      {r?.status === "PENDING" && !r?.entradaPaga && (
-                        <button
-                          type="button"
-                          className={styles.btnSuccess}
-                          onClick={() => sinalRecebidoConfirmar(r)}
-                          title="Marca a entrada como paga e confirma a reserva"
-                        >
-                          Sinal recebido → Confirmar
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        className={styles.btnSuccess}
-                        onClick={() => confirmarReserva(r._id)}
-                        disabled={r?.status === "CONFIRMED" || r?.status === "CANCELLED"}
-                        title={
-                          r?.status === "CANCELLED"
-                            ? "Reserva cancelada não pode ser confirmada"
-                            : "Confirmar sem registrar o sinal"
-                        }
-                      >
-                        ✔
-                      </button>
-
-                      <button
-                        type="button"
-                        className={styles.btnDanger}
-                        onClick={() => cancelarReserva(r._id)}
-                        disabled={r?.status === "CANCELLED"}
-                        title="Cancelar"
-                      >
-                        ✖
-                      </button>
-
-                      {r?.customerId?.whatsapp && (
-                        <a
-                          className={styles.btn}
-                          href={`https://wa.me/${normalizeBRPhone(r.customerId.whatsapp)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Abrir WhatsApp"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                          >
-                            <path d="M20.52 3.48A11.85 11.85 0 0012.06 0C5.53 0 .2 5.33.2 11.86c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.67a11.8 11.8 0 005.66 1.44h.01c6.53 0 11.86-5.33 11.86-11.86 0-3.17-1.23-6.15-3.41-8.33zM12.07 21.6h-.01a9.72 9.72 0 01-4.95-1.36l-.35-.2-3.8 1 1.01-3.7-.23-.38a9.7 9.7 0 01-1.49-5.15c0-5.36 4.36-9.72 9.73-9.72a9.66 9.66 0 016.88 2.85 9.67 9.67 0 012.85 6.87c0 5.36-4.36 9.72-9.72 9.72zm5.43-7.29c-.3-.15-1.76-.87-2.03-.97-.27-.1-.46-.15-.66.15-.2.3-.76.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.89-.8-1.5-1.8-1.67-2.1-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.66-1.6-.9-2.2-.24-.58-.48-.5-.66-.5h-.56c-.2 0-.52.07-.8.37-.27.3-1.05 1.02-1.05 2.5 0 1.47 1.08 2.9 1.23 3.1.15.2 2.12 3.23 5.14 4.52.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" />
-                          </svg>
-                        </a>
-                      )}
-
-                      <button
-                        type="button"
-                        className={styles.btn}
-                        onClick={() => alert(JSON.stringify(r, null, 2))}
-                        title="Ver detalhes"
-                      >
-                        ℹ
-                      </button>
+              <tbody>
+                {visiveis.length === 0 && (
+                  <tr>
+                    <td className={styles.empty} colSpan={6}>
+                      {filtro === "ALL"
+                        ? "Nenhuma reserva ainda. Quando um cliente escolher uma data no site, ela aparece aqui."
+                        : "Nenhuma reserva com esse status."}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                )}
+
+                {visiveis.map((r) => {
+                  const prazoCorrendo = temPrazoCorrendo(r);
+                  const prazo = prazoCorrendo ? textoPrazo(r.expiraEm, agoraMs) : null;
+                  const vencida = prazoCorrendo && Date.parse(r.expiraEm) <= agoraMs;
+
+                  return (
+                    <tr key={r._id} className={styles["row_" + r.status] || ""}>
+                      <td className={styles.tdStrong}>{r?.customerId?.nome || "-"}</td>
+                      <td data-label="WhatsApp">{r?.customerId?.whatsapp || "-"}</td>
+                      <td data-label="Data">{formatDateBR(r?.dataReserva)}</td>
+
+                      <td data-label="Status">
+                        <div>
+                          <span className={`${styles.badge} ${styles["b_" + r.status] || ""}`}>
+                            {statusLabel(r?.status)}
+                          </span>
+
+                          {prazo && (
+                            <small
+                              className={`${styles.prazo} ${vencida ? styles.prazoVencido : ""}`}
+                              title={
+                                vencida
+                                  ? "O sinal não foi registrado em 24h. A data já aparece livre no calendário."
+                                  : "Tempo para registrar o sinal antes de a data ser liberada"
+                              }
+                            >
+                              {vencida ? "⚠ " : "⏳ "}
+                              {prazo}
+                            </small>
+                          )}
+
+                          {r?.canceladaAutomaticamente && (
+                            <small
+                              className={styles.nota}
+                              title="Cancelada porque o sinal não foi pago em 24h"
+                            >
+                              Prazo do sinal vencido
+                            </small>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* ENTRADA */}
+                      <td data-label="Entrada">
+                        <div className={styles.entryBox}>
+                          <span className={styles.entryValue}>{moneyBR(r?.valorEntrada)}</span>
+
+                          {r?.entradaPaga ? (
+                            <>
+                              <small className={styles.entryPaid}>
+                                Pago em{" "}
+                                {r?.entradaPagaEm
+                                  ? new Date(r.entradaPagaEm).toLocaleDateString("pt-BR")
+                                  : "-"}
+                              </small>
+                              <button
+                                type="button"
+                                className={styles.btnUndo}
+                                onClick={() => desmarcarEntradaPaga(r)}
+                                title="Desfazer registro de pagamento"
+                              >
+                                Desfazer
+                              </button>
+                            </>
+                          ) : r?.status === "CANCELLED" ? (
+                            <small className={styles.entryHint}>—</small>
+                          ) : r?.status === "PENDING" ? (
+                            <small
+                              className={styles.entryHint}
+                              title='Use "Sinal recebido" em Ações'
+                            >
+                              Aguardando sinal
+                            </small>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.btnEntry}
+                              onClick={() => marcarEntradaPaga(r)}
+                              title="Registrar o sinal de uma reserva já confirmada"
+                            >
+                              Marcar como pago
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* AÇÕES */}
+                      <td>
+                        <div className={styles.actions}>
+                          {r?.status === "PENDING" && !r?.entradaPaga && (
+                            <button
+                              type="button"
+                              className={styles.primaryBtn}
+                              onClick={() => sinalRecebidoConfirmar(r)}
+                              title="Marca a entrada como paga e confirma a reserva"
+                            >
+                              Sinal recebido
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className={styles.btnSuccess}
+                            onClick={() => confirmarReserva(r._id)}
+                            disabled={r?.status === "CONFIRMED" || r?.status === "CANCELLED"}
+                            aria-label="Confirmar sem registrar o sinal"
+                            title={
+                              r?.status === "CANCELLED"
+                                ? "Reserva cancelada não pode ser confirmada"
+                                : "Confirmar sem registrar o sinal"
+                            }
+                          >
+                            ✔
+                          </button>
+
+                          <button
+                            type="button"
+                            className={styles.btnDanger}
+                            onClick={() => cancelarReserva(r._id)}
+                            disabled={r?.status === "CANCELLED"}
+                            aria-label="Cancelar reserva"
+                            title="Cancelar"
+                          >
+                            ✖
+                          </button>
+
+                          {r?.customerId?.whatsapp && (
+                            <a
+                              className={styles.btn}
+                              href={`https://wa.me/${normalizeBRPhone(r.customerId.whatsapp)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Abrir conversa no WhatsApp"
+                              title="Abrir WhatsApp"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden="true"
+                              >
+                                <path d="M20.52 3.48A11.85 11.85 0 0012.06 0C5.53 0 .2 5.33.2 11.86c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.67a11.8 11.8 0 005.66 1.44h.01c6.53 0 11.86-5.33 11.86-11.86 0-3.17-1.23-6.15-3.41-8.33zM12.07 21.6h-.01a9.72 9.72 0 01-4.95-1.36l-.35-.2-3.8 1 1.01-3.7-.23-.38a9.7 9.7 0 01-1.49-5.15c0-5.36 4.36-9.72 9.73-9.72a9.66 9.66 0 016.88 2.85 9.67 9.67 0 012.85 6.87c0 5.36-4.36 9.72-9.72 9.72zm5.43-7.29c-.3-.15-1.76-.87-2.03-.97-.27-.1-.46-.15-.66.15-.2.3-.76.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.89-.8-1.5-1.8-1.67-2.1-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.66-1.6-.9-2.2-.24-.58-.48-.5-.66-.5h-.56c-.2 0-.52.07-.8.37-.27.3-1.05 1.02-1.05 2.5 0 1.47 1.08 2.9 1.23 3.1.15.2 2.12 3.23 5.14 4.52.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" />
+                              </svg>
+                            </a>
+                          )}
+
+                          <button
+                            type="button"
+                            className={styles.btn}
+                            onClick={() => setDetalhe(r)}
+                            aria-label="Ver detalhes da reserva"
+                            title="Ver detalhes"
+                          >
+                            ℹ
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {detalhe && (
+          <div className={styles.modalOverlay} onClick={() => setDetalhe(null)}>
+            <div
+              className={styles.modal}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Detalhes da reserva"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className={styles.modalHead}>
+                <div>
+                  <strong>{detalhe?.customerId?.nome || "Reserva"}</strong>
+                  <div className={styles.modalSub}>
+                    Festa em {formatDateBR(detalhe?.dataReserva)}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={styles.modalClose}
+                  onClick={() => setDetalhe(null)}
+                  aria-label="Fechar detalhes"
+                >
+                  ✖
+                </button>
+              </div>
+
+              <div className={styles.modalGrid}>
+                <div className={styles.kv}>
+                  <span>Status</span>
+                  <strong>{statusLabel(detalhe?.status)}</strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>Horário</span>
+                  <strong>
+                    {detalhe?.horarioInicio || "09:30"} às {detalhe?.horarioFim || "22:00"}
+                  </strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>WhatsApp</span>
+                  <strong>{detalhe?.customerId?.whatsapp || "-"}</strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>E-mail</span>
+                  <strong>{detalhe?.customerId?.email || "-"}</strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>Sinal</span>
+                  <strong>
+                    {moneyBR(detalhe?.valorEntrada)}{" "}
+                    {detalhe?.entradaPaga
+                      ? `(pago em ${formatDateTimeBR(detalhe?.entradaPagaEm)})`
+                      : "(não pago)"}
+                  </strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>Valor total</span>
+                  <strong>{moneyBR(detalhe?.valorTotal)}</strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>Restante a receber</span>
+                  <strong>
+                    {moneyBR(
+                      Number(detalhe?.valorTotal || 0) -
+                        (detalhe?.entradaPaga ? Number(detalhe?.valorEntrada || 0) : 0)
+                    )}
+                  </strong>
+                </div>
+
+                <div className={styles.kv}>
+                  <span>Pedido feito em</span>
+                  <strong>{formatDateTimeBR(detalhe?.createdAt)}</strong>
+                </div>
+
+                <div className={`${styles.kv} ${styles.kvFull}`}>
+                  <span>Observações do cliente</span>
+                  <strong>{detalhe?.observacoes || "Nenhuma observação."}</strong>
+                </div>
+              </div>
+
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  onClick={() => setDetalhe(null)}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AdminLayout>
