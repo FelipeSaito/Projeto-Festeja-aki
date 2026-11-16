@@ -1,0 +1,194 @@
+/* styles/adminPerfil.module.css
+   Tela "Quem está usando?" do painel. */
+
+.wrapper{
+  --fa-amarelo: #fbfd2e;
+  --fa-petroleo: #0e4450;
+  --fa-petroleo-claro: #17616f;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: var(--fa-petroleo);
+  color: #ffffff;
+}
+
+.wrapper button{
+  font-family: inherit;
+}
+
+.wrapper :focus-visible{
+  outline: 3px solid var(--fa-amarelo);
+  outline-offset: 3px;
+}
+
+.conteudo{
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.titulo{
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--fa-amarelo);
+}
+
+.texto{
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: rgba(255,255,255,0.82);
+}
+
+/* ===== Escolha do perfil ===== */
+
+.perfis{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 36px;
+}
+
+.perfil{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.perfil:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.avatar{
+  width: 128px;
+  height: 128px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  border: 4px solid transparent;
+  color: #ffffff;
+  font-size: 60px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.perfil:hover:not(:disabled) .avatar{
+  border-color: var(--fa-amarelo);
+}
+
+.avatarMenor{
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+  font-size: 40px;
+  margin-bottom: 16px;
+}
+
+.nome{
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.aviso{
+  font-size: 12px;
+  color: rgba(255,255,255,0.82);
+}
+
+/* ===== PIN ===== */
+
+.pontos{
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.ponto{
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.7);
+}
+
+.pontoCheio{
+  background: var(--fa-amarelo);
+  border-color: var(--fa-amarelo);
+}
+
+.erro{
+  min-height: 22px;
+  margin: 14px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffb4ac;
+}
+
+.teclado{
+  display: grid;
+  grid-template-columns: repeat(3, 76px);
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.tecla,
+.teclaTexto{
+  height: 76px;
+  border-radius: 50%;
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.tecla{
+  background: rgba(255,255,255,0.12);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.tecla:hover:not(:disabled){
+  background: rgba(255,255,255,0.22);
+}
+
+.teclaTexto{
+  background: transparent;
+  font-size: 14px;
+}
+
+.tecla:disabled,
+.teclaTexto:disabled{
+  opacity: .4;
+  cursor: default;
+}
+
+@media (max-width: 380px){
+  .avatar{
+    width: 108px;
+    height: 108px;
+    font-size: 50px;
+  }
+
+  .avatarMenor{
+    width: 72px;
+    height: 72px;
+    font-size: 34px;
+  }
+
+  .perfis{
+    gap: 16px;
+  }
+}

@@ -1,4 +1,5 @@
 // components/AdminLayout.js
+import { useEffect, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -57,6 +58,43 @@ export default function AdminLayout({
   children,
 }) {
   const router = useRouter();
+  const [perfil, setPerfil] = useState(null);
+
+  // Confere quem está usando este aparelho.
+  // Sem login -> tela de login. Sem perfil escolhido -> tela "Quem está usando?".
+  useEffect(() => {
+    let cancelado = false;
+
+    async function conferirPerfil() {
+      try {
+        const res = await fetch("/api/auth/perfis", { credentials: "include" });
+
+        if (res.status === 401) {
+          router.replace("/admin/login");
+          return;
+        }
+
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.ok) return;
+
+        if (!j.atual) {
+          router.replace("/admin/perfil");
+          return;
+        }
+
+        if (!cancelado) setPerfil(j.atual);
+      } catch {
+        // sem conexão: mantém a tela como está
+      }
+    }
+
+    conferirPerfil();
+
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className={styles.shell}>
@@ -116,7 +154,23 @@ export default function AdminLayout({
             {subtitle && <p className={styles.p}>{subtitle}</p>}
           </div>
 
-          {actions && <div className={styles.headerRight}>{actions}</div>}
+          {(actions || perfil) && (
+            <div className={styles.headerRight}>
+              {actions}
+
+              {perfil && (
+                <Link
+                  href="/admin/perfil"
+                  className={styles.avatar}
+                  style={{ background: perfil.cor, textDecoration: "none", flexShrink: 0 }}
+                  aria-label={`Perfil de ${perfil.nome}. Trocar de perfil`}
+                  title={`${perfil.nome} (trocar de perfil)`}
+                >
+                  {perfil.nome.charAt(0)}
+                </Link>
+              )}
+            </div>
+          )}
         </header>
 
         <section className={styles.content}>{children}</section>
