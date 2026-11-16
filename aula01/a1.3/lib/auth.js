@@ -4,6 +4,11 @@ import { parse } from "cookie";
 
 export const COOKIE_NAME = "fa_token";
 
+// Duração da sessão do painel. Para mudar o prazo, altere só o número de dias:
+// o token e o cookie usam este mesmo valor.
+export const SESSAO_DIAS = 30;
+export const SESSAO_SEGUNDOS = SESSAO_DIAS * 24 * 60 * 60;
+
 function getSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET não definido");
@@ -11,11 +16,14 @@ function getSecret() {
 }
 
 export function signAdminToken(payload) {
-  return jwt.sign(payload, getSecret(), { expiresIn: "2h" });
+  return jwt.sign(payload, getSecret(), {
+    algorithm: "HS256",
+    expiresIn: SESSAO_SEGUNDOS,
+  });
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, getSecret());
+  return jwt.verify(token, getSecret(), { algorithms: ["HS256"] });
 }
 
 export function getTokenFromReq(req) {

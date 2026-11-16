@@ -1,9 +1,20 @@
+// pages/api/auth/login.js
+// Login do administrador: confere e-mail e senha e grava o cookie de sessão.
+import crypto from "crypto";
 import { serialize } from "cookie";
-import { COOKIE_NAME, signAdminToken } from "../../../lib/auth";
+import { COOKIE_NAME, SESSAO_SEGUNDOS, signAdminToken } from "../../../lib/auth";
+
+// Compara dois textos em tempo constante, para não dar pistas sobre a senha
+function iguais(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 
 export default function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ ok: false, error: "Método não permitido" });
   }
 
   const { email, password } = req.body || {};
@@ -12,21 +23,17 @@ export default function handler(req, res) {
   const envPass = process.env.ADMIN_PASSWORD;
   const secret = process.env.JWT_SECRET;
 
-  // ✅ DEBUG (deixa por 1 teste, depois remove)
-  console.log("LOGIN attempt:", { email, hasPass: !!password });
-  console.log("ENV:", { envEmail, hasEnvPass: !!envPass, hasSecret: !!secret });
-
   if (!envEmail || !envPass || !secret) {
-    return res.status(500).json({
-      ok: false,
-      error: "Faltando ADMIN_EMAIL/ADMIN_PASSWORD/JWT_SECRET no .env.local",
-    });
+    // O detalhe fica só no log do servidor, sem nenhum valor
+    console.error("Login indisponível: variáveis de ambiente do admin não configuradas.");
+    return res.status(500).json({ ok: false, error: "Login indisponível no momento." });
   }
 
-  const okEmail = String(email || "").trim().toLowerCase() === String(envEmail).trim().toLowerCase();
-  const okPass = String(password || "") === String(envPass);
-
-  console.log("CHECK:", { okEmail, okPass });
+  const okEmail = iguais(
+    String(email || "").trim().toLowerCase(),
+    String(envEmail).trim().toLowerCase()
+  );
+  const okPass = iguais(String(password || ""), String(envPass));
 
   if (!okEmail || !okPass) {
     return res.status(401).json({ ok: false, error: "Credenciais inválidas." });
@@ -38,10 +45,10 @@ export default function handler(req, res) {
     "Set-Cookie",
     serialize(COOKIE_NAME, token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 2,
+      maxAge: SESSAO_SEGUNDOS,
     })
   );
 
