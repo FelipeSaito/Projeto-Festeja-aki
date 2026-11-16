@@ -6,6 +6,7 @@ import styles from "../styles/admin.module.css";
 
 const LINKS = [
   { href: "/admin/reservas", label: "Reservas", icon: "reservas" },
+  { href: "/admin/limpeza", label: "Limpeza", icon: "limpeza" },
   { href: "/admin/dashboard", label: "Resumo", icon: "metricas" },
 ];
 
@@ -26,6 +27,14 @@ function Icone({ nome }) {
       <svg {...comum}>
         <rect x="3" y="5" width="18" height="16" rx="3" />
         <path d="M3 10h18M8 3v4M16 3v4" />
+      </svg>
+    );
+  }
+
+  if (nome === "limpeza") {
+    return (
+      <svg {...comum}>
+        <path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" />
       </svg>
     );
   }

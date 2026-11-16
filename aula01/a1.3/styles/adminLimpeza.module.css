@@ -1,0 +1,198 @@
+/* styles/adminLimpeza.module.css
+   Tela "Limpeza" do painel.
+   As cores (--fa-...) vêm de .shell, em styles/admin.module.css. */
+
+.page{
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.alert{
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--fa-vermelho);
+  background: var(--fa-vermelho-suave);
+  color: #8f1414;
+  font-size: 14px;
+}
+
+.vazio{
+  margin: 0;
+  padding: 24px 0;
+  font-size: 15px;
+  color: var(--fa-texto-suave);
+}
+
+/* ===== Cartão de uma limpeza ===== */
+
+.cartao{
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--fa-superficie);
+  border: 1px solid var(--fa-borda);
+  border-left: 6px solid #b9c4c6;
+}
+
+.c_hoje{ border-left-color: #e8960c; }
+.c_atrasada{ border-left-color: var(--fa-vermelho); }
+.c_pronta{ border-left-color: var(--fa-verde); }
+
+.topo{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.titulo{
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--fa-petroleo);
+}
+
+.sub{
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--fa-texto-suave);
+}
+
+.selo{
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid var(--fa-borda);
+}
+
+.s_hoje{
+  background: var(--fa-laranja-suave);
+  border-color: #efcf86;
+  color: var(--fa-laranja);
+}
+
+.s_atrasada{
+  background: var(--fa-vermelho-suave);
+  border-color: #f3b9b4;
+  color: var(--fa-vermelho);
+}
+
+.s_pronta{
+  background: var(--fa-verde-suave);
+  border-color: #a9dcbc;
+  color: var(--fa-verde);
+}
+
+/* ===== Progresso ===== */
+
+.progresso{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.barra{
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--fa-fundo);
+  border: 1px solid var(--fa-borda);
+  overflow: hidden;
+}
+
+.barraCheia{
+  height: 100%;
+  background: var(--fa-petroleo);
+  border-radius: 999px;
+}
+
+.c_pronta .barraCheia{
+  background: var(--fa-verde);
+}
+
+.contagem{
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fa-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Itens ===== */
+
+.itens{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.itens li{
+  border-top: 1px solid var(--fa-borda);
+}
+
+.item{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 0;
+  font-size: 16px;
+  color: var(--fa-texto);
+  cursor: pointer;
+}
+
+.item input{
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--fa-petroleo);
+  cursor: pointer;
+}
+
+.itemFeito span{
+  color: var(--fa-texto-suave);
+  text-decoration: line-through;
+}
+
+/* ===== Ações ===== */
+
+.acoes{
+  padding-top: 4px;
+}
+
+.avisarBtn{
+  width: 100%;
+  min-height: 50px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--fa-verde);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.avisarBtn:hover{
+  background: #156a39;
+}
+
+@media (min-width: 821px){
+  .page{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .alert,
+  .vazio{
+    grid-column: 1 / -1;
+  }
+}

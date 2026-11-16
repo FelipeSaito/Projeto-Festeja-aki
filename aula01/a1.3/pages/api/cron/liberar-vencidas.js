@@ -1,10 +1,45 @@
 // pages/api/cron/liberar-vencidas.js
-// Chamada pelo Cron da Vercel uma vez por dia.
-// Cancela reservas PENDING sem sinal com prazo vencido e libera as datas.
+// Chamada pelo Cron da Vercel uma vez por dia, de manhã.
+// 1. Cancela reservas PENDING sem sinal com prazo vencido e libera as datas.
+// 2. Envia o lembrete das limpezas marcadas para hoje.
 import {
   liberarReservasVencidas,
   responderErro,
 } from "../../../lib/reservasService";
+import {
+  limpezasDeHoje,
+  dataPorExtenso,
+  descreverLimpeza,
+} from "../../../lib/limpezaService";
+import { enviarNotificacao } from "../../../lib/push";
+
+// Devolve quantas limpezas de hoje foram lembradas. Nunca derruba o cron.
+async function lembrarLimpezas() {
+  try {
+    const pendentes = await limpezasDeHoje();
+    if (pendentes.length === 0) return 0;
+
+    const primeira = pendentes[0];
+
+    const body =
+      pendentes.length === 1
+        ? `${descreverLimpeza(primeira)}: festa de ${primeira.cliente.nome} em ${dataPorExtenso(
+            primeira.dataReserva
+          )}.`
+        : `${pendentes.length} limpezas para hoje. Abra o checklist para ver.`;
+
+    await enviarNotificacao({
+      title: "Limpeza do salão hoje",
+      body,
+      url: "/admin/limpeza",
+    });
+
+    return pendentes.length;
+  } catch (err) {
+    console.error("Falha ao lembrar das limpezas de hoje.", err?.message || err);
+    return 0;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -21,7 +56,9 @@ export default async function handler(req, res) {
 
   try {
     const { liberadas } = await liberarReservasVencidas();
-    return res.status(200).json({ ok: true, liberadas });
+    const lembretes = await lembrarLimpezas();
+
+    return res.status(200).json({ ok: true, liberadas, lembretes });
   } catch (err) {
     return responderErro(res, err, "Erro ao liberar reservas vencidas.");
   }
