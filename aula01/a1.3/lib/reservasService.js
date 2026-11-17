@@ -16,6 +16,10 @@ export const HORARIO_FIM = "22:00";
 export const PRAZO_SINAL_HORAS = 24;
 const PRAZO_SINAL_MS = PRAZO_SINAL_HORAS * 60 * 60 * 1000;
 
+// Máximo de pedidos aguardando o sinal por cliente (mesmo WhatsApp).
+// 2 = um fim de semana inteiro (sábado e domingo).
+export const MAX_PENDENTES_POR_CLIENTE = 2;
+
 export const STATUS = {
   PENDING: "PENDING",
   CONFIRMED: "CONFIRMED",
@@ -411,10 +415,29 @@ export async function criarReserva({ nome, whatsapp, email = "", dataReserva, ob
 
   await db.runTransaction(async (tx) => {
     // Leituras antes das gravações (regra do Firestore)
-    const [diaDoc, clienteDoc] = await Promise.all([
+    const [diaDoc, clienteDoc, pendentesSnap] = await Promise.all([
       tx.get(diaRef),
       tx.get(clienteRef),
+      tx.get(
+        db
+          .collection(COL_RESERVAS)
+          .where("customerId", "==", wpp)
+          .where("status", "==", STATUS.PENDING)
+      ),
     ]);
+
+    // Limite por cliente: pedidos sem sinal e ainda dentro do prazo
+    const aguardandoSinal = pendentesSnap.docs.filter((doc) => {
+      const pendente = doc.data();
+      return !pendente.entradaPaga && !estaVencida(pendente, agora.getTime());
+    }).length;
+
+    if (aguardandoSinal >= MAX_PENDENTES_POR_CLIENTE) {
+      throw new ReservaError(
+        "Você já tem pedidos aguardando o sinal. Pague o sinal ou fale com o salão antes de reservar outra data.",
+        429
+      );
+    }
 
     let reservaVencidaRef = null;
 

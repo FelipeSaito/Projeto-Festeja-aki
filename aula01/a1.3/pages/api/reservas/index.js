@@ -7,6 +7,12 @@ import {
   responderErro,
 } from "../../../lib/reservasService";
 import { enviarNotificacao } from "../../../lib/push";
+import {
+  ipDoPedido,
+  registrarTentativa,
+  devolverVaga,
+  JANELA_MINUTOS,
+} from "../../../lib/limiteEnvio";
 
 const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
@@ -30,6 +36,25 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST") {
+    // Limite de pedidos por IP. Se o próprio controle falhar, o pedido segue:
+    // um problema no limitador não pode impedir um cliente de reservar.
+    let vaga = null;
+
+    try {
+      vaga = await registrarTentativa(ipDoPedido(req));
+    } catch (err) {
+      console.error("Falha ao verificar o limite de pedidos.", err?.message || err);
+    }
+
+    if (vaga && !vaga.permitido) {
+      res.setHeader("Retry-After", String(JANELA_MINUTOS * 60));
+      return res.status(429).json({
+        ok: false,
+        error:
+          "Muitos pedidos em pouco tempo. Tente de novo mais tarde ou fale com o salão pelo WhatsApp.",
+      });
+    }
+
     try {
       // Apenas os campos que o cliente pode escolher.
       // valorEntrada, valorTotal, horários e status são definidos no servidor.
@@ -63,6 +88,15 @@ export default async function handler(req, res) {
 
       return res.status(201).json({ ok: true, reserva });
     } catch (err) {
+      // A reserva não foi criada: a vaga volta para o cliente tentar de novo
+      if (vaga) {
+        try {
+          await devolverVaga(vaga.chave);
+        } catch (erroVaga) {
+          console.error("Falha ao devolver a vaga do limite.", erroVaga?.message || erroVaga);
+        }
+      }
+
       return responderErro(res, err, "Erro interno ao processar reserva.");
     }
   }
