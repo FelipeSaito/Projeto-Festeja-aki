@@ -1,11 +1,39 @@
+// pages/index.js
+import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
 import Header from "../components/Header";
 import styles from "../styles/Home.module.css";
 
+// Endereço público do site e imagem usada na prévia do link (WhatsApp, redes sociais).
+// A prévia exige endereços completos, com https://.
+// Para trocar a imagem: salve a nova em public/ e altere só IMAGEM_PREVIA.
+const SITE_URL = "https://projeto-festeja-aki.vercel.app";
+const IMAGEM_PREVIA = `${SITE_URL}/icons/logo.jpg`;
+
+const TITULO = "Festeja Aki | Salão de festas";
+const DESCRICAO =
+  "Salão de festas com playground, churrasqueira, som ambiente e iluminação. Veja as datas livres e reserve o seu fim de semana.";
+
 export default function HomePage() {
   return (
     <>
+      <Head>
+        <title>{TITULO}</title>
+        <meta name="description" content={DESCRICAO} />
+
+        {/* Prévia do link no WhatsApp e em redes sociais */}
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="pt_BR" />
+        <meta property="og:site_name" content="Festeja Aki" />
+        <meta property="og:title" content={TITULO} />
+        <meta property="og:description" content={DESCRICAO} />
+        <meta property="og:url" content={SITE_URL} />
+        <meta property="og:image" content={IMAGEM_PREVIA} />
+        <meta property="og:image:alt" content="Festeja Aki" />
+        <meta name="twitter:card" content="summary" />
+      </Head>
+
       <Header />
 
       <section className={styles.hero}>
@@ -144,14 +172,14 @@ export default function HomePage() {
       <h4>Links rápidos</h4>
       <a href="#sobre">Sobre nós</a>
       <a href="https://www.google.com/maps/place/Sal%C3%A3o+Festeja-Aki/@-23.6477927,-46.7845667,3a,75y,301.88h,80.92t/data=!3m7!1e1!3m5!1sN54ATbzOl38J9XDHmd5FCA!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com%2Fv1%2Fthumbnail%3Fcb_client%3Dmaps_sv.tactile%26w%3D900%26h%3D600%26pitch%3D9.07535563963556%26panoid%3DN54ATbzOl38J9XDHmd5FCA%26yaw%3D301.8842270650802!7i16384!8i8192!4m6!3m5!1s0x94ce53af460def3b:0x4d0a85237616a0af!8m2!3d-23.6477419!4d-46.7847162!16s%2Fg%2F11p74llryg?entry=ttu&g_ep=EgoyMDI2MDIyMy4wIKXMDSoASAFQAw%3D%3D">Localização</a>
-      <a href="#">Reservar</a>
+      <a href="/calendario">Reservar</a>
     </div>
 
     <div className={styles.footerContact}>
       <h4>Contato</h4>
       <p>📍 Rua Koto Mitsutani, 422</p>
-      <p>📞 (11) 9 9999-9999</p>
-      <p>✉️ contato@festejaaki.com</p>
+      <p>📞 (11) 95840-3673</p>
+      <p>✉️ marciosaito@gmail.com</p>
     </div>
 
   </div>
