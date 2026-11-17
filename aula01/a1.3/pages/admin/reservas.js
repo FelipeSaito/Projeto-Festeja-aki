@@ -87,6 +87,22 @@ function openWhatsApp(phoneRaw, message) {
   return true;
 }
 
+/* ===== Página de acompanhamento do cliente ===== */
+
+// Link público /reserva/<código>. Usa o endereço em que o painel está aberto:
+// em produção sai com o domínio do site; em localhost, com localhost.
+function linkAcompanhamento(reserva) {
+  const token = reserva?.tokenAcompanhamento;
+  if (!token || typeof window === "undefined") return "";
+  return `${window.location.origin}/reserva/${token}`;
+}
+
+// Trecho final das mensagens de WhatsApp (vazio se a reserva não tiver código)
+function rodapeAcompanhamento(reserva) {
+  const link = linkAcompanhamento(reserva);
+  return link ? `\nAcompanhe a sua reserva por aqui:\n${link}\n` : "";
+}
+
 /* ===== Ícones dos botões ===== */
 function Icone({ nome }) {
   const comum = {
@@ -159,6 +175,7 @@ export default function AdminReservasPage() {
   const [filtro, setFiltro] = useState("ALL");
   const [detalhe, setDetalhe] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
   async function fetchReservas() {
     try {
@@ -228,7 +245,7 @@ Valor Total: ${moneyBR(reserva?.valorTotal)}
 Seu evento já está oficialmente garantido conosco.
 
 Caso precise de qualquer informação adicional, estamos à disposição.
-`;
+${rodapeAcompanhamento(reserva)}`;
 
       if (phone) {
         const avisar = window.confirm(
@@ -284,7 +301,7 @@ Valor Total: ${moneyBR(rLocal?.valorTotal)}
 Estamos preparando tudo para proporcionar uma experiência memorável.
 
 Caso precise de qualquer informação adicional, estamos à disposição.
-`;
+${rodapeAcompanhamento(rLocal)}`;
 
       if (phone) {
         const avisar = window.confirm(
@@ -432,7 +449,7 @@ Seu evento já está oficialmente garantido conosco.
 Estamos preparando tudo para proporcionar uma experiência memorável.
 
 Caso precise de qualquer informação adicional, estamos à disposição.
-`;
+${rodapeAcompanhamento(reserva)}`;
 
       if (whatsapp) {
         const ok = openWhatsApp(whatsapp, msg);
@@ -472,10 +489,49 @@ Caso precise de qualquer informação adicional, estamos à disposição.
     }
   }
 
+  // 🔗 COPIAR O LINK DE ACOMPANHAMENTO DO CLIENTE
+  async function copiarLinkAcompanhamento(reserva) {
+    const link = linkAcompanhamento(reserva);
+    if (!link) return;
+
+    try {
+      await navigator.clipboard.writeText(link);
+      setLinkCopiado(true);
+    } catch (err) {
+      // Navegador sem permissão de copiar: mostra o link para copiar à mão
+      window.prompt("Copie o link do cliente:", link);
+    }
+  }
+
+  // 🔗 ENVIAR O LINK DE ACOMPANHAMENTO PELO WHATSAPP
+  function enviarLinkAcompanhamento(reserva) {
+    const link = linkAcompanhamento(reserva);
+    const phone = reserva?.customerId?.whatsapp;
+    if (!link || !phone) return;
+
+    const nome = reserva?.customerId?.nome || "Cliente";
+
+    const msg = `
+Olá ${nome}, tudo bem?
+
+Aqui é do Festeja Aki. Por este link você acompanha a sua reserva do dia ${formatDateBR(reserva?.dataReserva)}:
+
+${link}
+`;
+
+    const ok = openWhatsApp(phone, msg);
+    if (!ok) alert("O WhatsApp do cliente está inválido.");
+  }
+
   useEffect(() => {
     fetchReservas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ao abrir ou fechar os detalhes, o aviso "Link copiado" volta ao normal
+  useEffect(() => {
+    setLinkCopiado(false);
+  }, [detalhe]);
 
   // Atualiza o contador de prazo a cada minuto
   useEffect(() => {
@@ -843,6 +899,30 @@ Caso precise de qualquer informação adicional, estamos à disposição.
               </div>
 
               <div className={styles.modalActions}>
+                {detalhe?.tokenAcompanhamento && (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.ghostBtn}
+                      onClick={() => copiarLinkAcompanhamento(detalhe)}
+                      title="Copiar o link da página de acompanhamento do cliente"
+                    >
+                      {linkCopiado ? "Link copiado ✓" : "Copiar link do cliente"}
+                    </button>
+
+                    {detalhe?.customerId?.whatsapp && (
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        onClick={() => enviarLinkAcompanhamento(detalhe)}
+                        title="Enviar o link de acompanhamento pelo WhatsApp"
+                      >
+                        Enviar link no WhatsApp
+                      </button>
+                    )}
+                  </>
+                )}
+
                 <button
                   type="button"
                   className={styles.ghostBtn}

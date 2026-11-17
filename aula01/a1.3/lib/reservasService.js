@@ -130,9 +130,45 @@ export function estaVencida(reserva, agoraMs = Date.now()) {
   return prazo !== null && prazo <= agoraMs;
 }
 
-// Código secreto para a futura página de acompanhamento do cliente
+// Código secreto da página de acompanhamento do cliente (/reserva/<token>).
+// 24 bytes aleatórios -> 32 caracteres em base64url.
 function gerarTokenAcompanhamento() {
   return crypto.randomBytes(24).toString("base64url");
+}
+
+const TOKEN_REGEX = /^[A-Za-z0-9_-]{32}$/;
+
+// Situações mostradas ao cliente na página de acompanhamento
+export const SITUACAO = {
+  AGUARDANDO_SINAL: "AGUARDANDO_SINAL",
+  SINAL_RECEBIDO: "SINAL_RECEBIDO",
+  CONFIRMADA: "CONFIRMADA",
+  SALAO_PRONTO: "SALAO_PRONTO",
+  REALIZADA: "REALIZADA",
+  PRAZO_ENCERRADO: "PRAZO_ENCERRADO",
+  CANCELADA: "CANCELADA",
+};
+
+function situacaoPublica(reserva, agoraMs = Date.now()) {
+  if (reserva.status === STATUS.CANCELLED) {
+    return reserva.canceladaAutomaticamente
+      ? SITUACAO.PRAZO_ENCERRADO
+      : SITUACAO.CANCELADA;
+  }
+
+  if (reserva.status === STATUS.CONFIRMED) {
+    if (reserva.dataReserva < todayInBrazil()) return SITUACAO.REALIZADA;
+
+    // Checklist de limpeza concluído (campo gravado pelo lib/limpezaService.js)
+    if (reserva.limpeza?.concluidaEm) return SITUACAO.SALAO_PRONTO;
+
+    return SITUACAO.CONFIRMADA;
+  }
+
+  // PENDING
+  if (reserva.entradaPaga) return SITUACAO.SINAL_RECEBIDO;
+  if (estaVencida(reserva, agoraMs)) return SITUACAO.PRAZO_ENCERRADO;
+  return SITUACAO.AGUARDANDO_SINAL;
 }
 
 function serializeReserva(id, data) {
@@ -221,7 +257,35 @@ export async function listarReservas() {
   const snapshot = await db.collection(COL_RESERVAS).get();
   const agoraMs = Date.now();
 
-  const base = snapshot.docs.map((doc) => serializeReserva(doc.id, doc.data()));
+  // Reservas antigas, criadas antes do código de acompanhamento, ganham um aqui.
+  // Uma falha nessa etapa não pode impedir a listagem do painel.
+  const tokensNovos = new Map();
+  const semToken = snapshot.docs
+    .filter((doc) => !doc.get("tokenAcompanhamento"))
+    .slice(0, 400); // limite de segurança do batch do Firestore (500)
+
+  if (semToken.length > 0) {
+    try {
+      const batch = db.batch();
+
+      for (const doc of semToken) {
+        const token = gerarTokenAcompanhamento();
+        tokensNovos.set(doc.id, token);
+        batch.update(doc.ref, { tokenAcompanhamento: token });
+      }
+
+      await batch.commit();
+    } catch (err) {
+      tokensNovos.clear();
+      console.error("Falha ao gerar códigos de acompanhamento.", err?.message || err);
+    }
+  }
+
+  const base = snapshot.docs.map((doc) => {
+    const data = doc.data();
+    const token = tokensNovos.get(doc.id);
+    return serializeReserva(doc.id, token ? { ...data, tokenAcompanhamento: token } : data);
+  });
   const clientes = await carregarClientes(db, base.map((r) => r.customerId));
 
   const reservas = base.map((reserva) => {
@@ -241,6 +305,55 @@ export async function listarReservas() {
   );
 
   return reservas;
+}
+
+// Dados da página de acompanhamento do cliente, a partir do código secreto.
+// Devolve SOMENTE o necessário para a página: nada de WhatsApp, e-mail,
+// observações ou IDs internos. Retorna null se o código não existir.
+export async function buscarAcompanhamento(token) {
+  if (typeof token !== "string" || !TOKEN_REGEX.test(token)) return null;
+
+  const db = getAdminDb();
+  const snapshot = await db
+    .collection(COL_RESERVAS)
+    .where("tokenAcompanhamento", "==", token)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  const reserva = snapshot.docs[0].data();
+
+  let primeiroNome = "";
+
+  if (reserva.customerId) {
+    const clienteDoc = await db
+      .collection(COL_CLIENTES)
+      .doc(String(reserva.customerId))
+      .get();
+
+    if (clienteDoc.exists) {
+      primeiroNome = String(clienteDoc.data().nome || "").trim().split(/\s+/)[0] || "";
+    }
+  }
+
+  const valorTotal = Number(reserva.valorTotal || 0);
+  const valorEntrada = Number(reserva.valorEntrada || 0);
+  const entradaPaga = Boolean(reserva.entradaPaga);
+
+  return {
+    primeiroNome,
+    dataReserva: reserva.dataReserva,
+    horarioInicio: reserva.horarioInicio || HORARIO_INICIO,
+    horarioFim: reserva.horarioFim || HORARIO_FIM,
+    situacao: situacaoPublica(reserva),
+    valorTotal,
+    valorEntrada,
+    valorRestante: Math.max(valorTotal - valorEntrada, 0),
+    entradaPaga,
+    // Só existe prazo enquanto a reserva está PENDING e sem sinal
+    expiraEm: toISO(prazoEfetivo(reserva)),
+  };
 }
 
 // ============================================================
@@ -365,9 +478,9 @@ export async function criarReserva({ nome, whatsapp, email = "", dataReserva, ob
     });
   });
 
-  // O código de acompanhamento não volta na resposta pública (por enquanto)
-  const { tokenAcompanhamento, ...reservaPublica } = reserva;
-  return serializeReserva(reservaRef.id, reservaPublica);
+  // O código de acompanhamento volta só para quem acabou de criar a reserva,
+  // para a tela de conclusão montar o link /reserva/<token>.
+  return serializeReserva(reservaRef.id, reserva);
 }
 
 // ============================================================

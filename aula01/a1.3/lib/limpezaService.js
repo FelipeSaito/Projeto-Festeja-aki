@@ -96,6 +96,9 @@ function montarLimpeza(id, reserva, cliente, datasConfirmadas) {
 
   return {
     reservaId: id,
+    // Código da página de acompanhamento do cliente (/reserva/<código>),
+    // usado pelo painel para montar o link no aviso de "salão pronto".
+    tokenAcompanhamento: reserva.tokenAcompanhamento || "",
     dataReserva: reserva.dataReserva,
     dataLimpeza: regra?.data || null,
     periodo: regra?.periodo || "dia",

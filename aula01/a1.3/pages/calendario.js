@@ -162,6 +162,7 @@ export default function CalendarioPage() {
         valorEntrada: j?.reserva?.valorEntrada,
         valorTotal: j?.reserva?.valorTotal,
         prazo: formatPrazo(j?.reserva?.expiraEm),
+        token: j?.reserva?.tokenAcompanhamento || "",
       });
       setStep(3);
 
@@ -376,9 +377,25 @@ const availableDateObjects = useMemo(() => {
                   sinal nesse prazo, a data volta a ficar disponível.
                 </p>
 
+                {confirmacao.token && (
+                  <>
+                    <Link
+                      href={`/reserva/${confirmacao.token}`}
+                      className={styles.cta}
+                      style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+                    >
+                      Acompanhar minha reserva
+                    </Link>
+                    <p className={styles.hint}>
+                      Guarde esse link: por ele você vê o prazo do sinal e a situação da reserva.
+                    </p>
+                  </>
+                )}
+
                 <button
                   type="button"
-                  className={styles.cta}
+                  className={confirmacao.token ? styles.backLink : styles.cta}
+                  style={confirmacao.token ? { marginTop: 12, display: "inline-block" } : undefined}
                   onClick={() => {
                     setConfirmacao(null);
                     setStep(1);
