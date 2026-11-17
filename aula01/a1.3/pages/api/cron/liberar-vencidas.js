@@ -51,12 +51,23 @@ export default async function handler(req, res) {
   const segredo = process.env.CRON_SECRET;
 
   if (!segredo || req.headers.authorization !== `Bearer ${segredo}`) {
+    // Registra só o motivo, nunca o cabeçalho recebido nem o segredo
+    console.warn(
+      segredo
+        ? "Cron: chamada recusada (sem autorização válida)."
+        : "Cron: CRON_SECRET não configurado; chamada recusada."
+    );
     return res.status(401).json({ ok: false, error: "Não autorizado" });
   }
 
   try {
     const { liberadas } = await liberarReservasVencidas();
     const lembretes = await lembrarLimpezas();
+
+    // Sempre deixa uma linha nos logs, para dar para conferir que o cron rodou
+    console.log(
+      `Cron: ${liberadas} reserva(s) vencida(s) liberada(s), ${lembretes} lembrete(s) de limpeza.`
+    );
 
     return res.status(200).json({ ok: true, liberadas, lembretes });
   } catch (err) {
